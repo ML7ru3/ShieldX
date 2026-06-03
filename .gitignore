@@ -226,3 +226,5 @@ __marimo__/
 # For machine-learning develop
 *.csv
 datasets/
+*.joblib
+*.json
