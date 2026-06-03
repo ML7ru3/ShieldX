@@ -1,5 +1,5 @@
 from preprocess import load_X_y
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
@@ -8,20 +8,19 @@ import joblib
 DF_PATH = "./datasets/BCCC-CIRA-CIC-DoHBrw-2020.csv"
 X, y = load_X_y(DF_PATH)
 
-
 # Train/test split
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
 # Train model
-clf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=2)
+clf = SVC(kernel="rbf", C=1, random_state=42, max_iter=1000, verbose=True)
 clf.fit(X_train, y_train)
 
 # Evaluate
 y_pred = clf.predict(X_test)
-print("RandomForest Accuracy:", accuracy_score(y_test, y_pred))
+print("SVM Accuracy:", accuracy_score(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 
 # Save the model
-joblib.dump(clf, "random_forest_model.joblib")
+joblib.dump(clf, "svm_model.joblib")

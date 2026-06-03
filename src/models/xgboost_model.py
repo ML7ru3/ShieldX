@@ -4,7 +4,7 @@ from sklearn.metrics import classification_report, accuracy_score
 import xgboost as xgb
 
 # Load data
-DF_PATH = "./datasets/L2-BenignDoH-MaliciousDoH.parquet"
+DF_PATH = "./datasets/BCCC-CIRA-CIC-DoHBrw-2020.csv"
 X, y = load_X_y(DF_PATH)
 # Map string labels to integers for XGBoost compatibility
 y = y.map({'Benign': 0, 'Malicious': 1})

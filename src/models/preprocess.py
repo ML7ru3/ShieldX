@@ -1,12 +1,12 @@
 import pandas as pd
 
 # Central columns to drop for network feature ML
-DROP_FEATS = ['SourceIP', 'DestinationIP', 'SourcePort',  'DestinationPort', 'TimeStamp', 'Label']
+DROP_FEATS = ['Label']
 
 # Returns (X, y) from a Parquet dataframe, with imputation
 # Usage: X, y = load_X_y(parquet_path)
 def load_X_y(df_path):
-    df = pd.read_parquet(df_path)
+    df = pd.read_csv(df_path)
     X = df.drop(DROP_FEATS, axis=1)
     y = df['Label']
 

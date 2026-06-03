@@ -5,3 +5,6 @@ lightgbm
 joblib
 scapy
 pyarrow
+pandas
+apscheduler
+pytest

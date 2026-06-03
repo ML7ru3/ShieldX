@@ -5,7 +5,7 @@ from lightgbm import early_stopping
 import lightgbm as lgb
 
 # Load data
-DF_PATH = "../../datasets/L2-BenignDoH-MaliciousDoH.parquet"
+DF_PATH = "./datasets/BCCC-CIRA-CIC-DoHBrw-2020.csv"
 X, y = load_X_y(DF_PATH)
 
 
@@ -23,7 +23,6 @@ clf.fit(
     eval_set=[(X_test, y_test)], 
     eval_metric='logloss', 
     callbacks=[early_stopping(stopping_rounds=10)], 
-    verbose=True
 )
 
 # Evaluate

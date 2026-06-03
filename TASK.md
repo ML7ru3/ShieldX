@@ -10,6 +10,6 @@ Done ShieldX_agent:
     -[x] Disable DoH on local machine.
         - [x] On startup, block all well-known public DoH endpoints using firewall.
     -[] Implement Dohlyzer to the agent.
-        -[x] Processing data from pcap files to chunk.
-        -[] Make and train a model (choosing RandomForest for best accuracy), datasets can take from original website Doh2020 or on Kaggle.
+        -[x] Processing data from pcap files to chunk like in datasets/.
+        -[x] Make and train a model (choosing RandomForest for best accuracy), datasets can take from original website Doh2020 or on Kaggle.
         -[] Make it predict that it is malware or not.
