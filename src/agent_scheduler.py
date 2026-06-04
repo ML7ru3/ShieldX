@@ -3,7 +3,7 @@ import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from pipeline import load_model, capture_and_predict
+from domains.pipeline import load_model, capture_and_predict
 
 logger = logging.getLogger(__name__)
 

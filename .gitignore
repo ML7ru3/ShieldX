@@ -228,3 +228,4 @@ __marimo__/
 datasets/
 *.joblib
 *.json
+agent_config.yaml
