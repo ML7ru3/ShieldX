@@ -1,4 +1,11 @@
 import logging
+
+DROP_FIELDS = ['SourceIP', 'SourcePort', 'DestinationIP', 'DestinationPort', 'Duration', 'TimeStamp', 'DoH']
+
+def filter_model_features(features: dict) -> dict:
+    """Return a shallow copy of features with unwanted fields dropped for model prediction compatibility."""
+    return {k: v for k, v in features.items() if k not in DROP_FIELDS}
+
 import time
 from collections import defaultdict
 
@@ -68,10 +75,16 @@ def capture_and_predict(interface='eth0', sniff_duration=120):
     )
     sniffer.start()
     logger.info("Sniffing on %s for %d seconds...", interface, sniff_duration)
-
-    time.sleep(sniff_duration)
-    sniffer.stop()
-    logger.info("Sniffing complete.")
+    try:
+        time.sleep(sniff_duration)
+    except Exception as e:
+        logger.error("Error during sniffing: %s", e, exc_info=True)
+    finally:
+        if hasattr(sniffer, 'running') and sniffer.running:
+            sniffer.stop()
+            logger.info("Sniffing complete.")
+        else:
+            logger.warning("Sniffer was not running; skip stop().")
 
     flows = list(session.get_flows())
     logger.info("Captured %d flows", len(flows))
@@ -80,7 +93,10 @@ def capture_and_predict(interface='eth0', sniff_duration=120):
     for flow in flows:
         try:
             features = flow.get_data()
-            y_pred = predict(features)
+            filtered_features = filter_model_features(features)
+            # Ensure forbidden fields are not present in prediction
+            assert all(key not in filtered_features for key in DROP_FIELDS), "Forbidden fields present in filtered features!"
+            y_pred = predict(filtered_features)
             results.append((features, y_pred))
 
             if y_pred == 1:
@@ -102,6 +118,8 @@ def capture_and_predict(interface='eth0', sniff_duration=120):
                     features.get('DestinationIP'),
                     features.get('DestinationPort'),
                 )
+        except AttributeError as exc:
+            logger.error("AttributeError in packet processing (likely FORWARD/REVERSE): %s", exc, exc_info=True)
         except Exception as exc:
             logger.error("Error processing flow: %s", exc, exc_info=True)
 

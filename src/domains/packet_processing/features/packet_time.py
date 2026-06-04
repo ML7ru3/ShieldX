@@ -111,7 +111,7 @@ class PacketTime:
         """
         mode = -1
         if len(self._get_packet_times()) != 0:
-            mode = float(stat.mode(self._get_packet_times())[0])
+            mode = float(stat.mode(self._get_packet_times(), keepdims=True)[0])
 
         return mode
 

@@ -74,7 +74,7 @@ class ResponseTime:
         """
         mode = -1
         if len(self.get_dif()) != 0:
-            mode = float(stat.mode(self.get_dif())[0])
+            mode = float(stat.mode(self.get_dif(), keepdims=True)[0])
 
         return mode
 

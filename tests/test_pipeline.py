@@ -3,13 +3,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# --- Patch for field dropping tests ---
+DROP_FIELDS = ['SourceIP', 'SourcePort', 'DestinationIP', 'DestinationPort', 'Duration']
 
 @pytest.fixture(autouse=True)
 def reset_model():
     import pipeline
     pipeline._model = None
     yield
-
 
 class TestLoadModel:
     @patch('pipeline.xgb.XGBClassifier')
@@ -29,7 +30,6 @@ class TestLoadModel:
         second = load_model()
         assert first is second
         assert MockXGB.return_value.load_model.call_count == 1
-
 
 class TestPredict:
     @patch('pipeline.load_model')
@@ -65,6 +65,20 @@ class TestPredict:
         result = predict({})
         assert result == 0
 
+    def test_filter_model_features_drops_fields(self):
+        from pipeline import filter_model_features
+        # Construct a dict with all forbidden fields and some allowed
+        base = {key: f"val_{key}" for key in DROP_FIELDS}
+        base["some_good_field"] = 42
+        out = filter_model_features(base)
+        # Should only have the allowed field
+        assert set(out.keys()) == {"some_good_field"}
+
+    def test_filter_model_features_noop(self):
+        from pipeline import filter_model_features
+        simple = {"only": 1, "nonforbidden": 2}
+        out = filter_model_features(simple)
+        assert out == simple
 
 class TestCaptureAndPredict:
     @patch('pipeline.AsyncSniffer')
@@ -94,7 +108,6 @@ class TestCaptureAndPredict:
         assert isinstance(results, list)
         assert len(results) == 0
 
-
 class TestFlowCollector:
     def test_no_file_created(self):
         from pipeline import FlowCollector
@@ -117,7 +130,7 @@ class TestFlowCollector:
         mock_flow = MagicMock()
         mock_flow.latest_timestamp = 0
         mock_flow.duration = 999
-        collector.flows[('key', 0)] = mock_flow
+        collector.flows[("key", 0)] = mock_flow
 
         collector.garbage_collect(latest_time=1000)
         assert len(collector.flows) == 0

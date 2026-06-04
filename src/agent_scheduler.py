@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def scheduled_task():
     logger.info("=== Scheduled pipeline run started ===")
     try:
-        results = capture_and_predict(interface='wlan0', sniff_duration=120)
+        results = capture_and_predict(interface='ens33', sniff_duration=120)
         malicious = sum(1 for _, pred in results if pred == 1)
         logger.info(
             "=== Pipeline finished: %d flows, %d malicious ===",
@@ -24,7 +24,7 @@ def scheduled_task():
 def main():
     load_model()
     scheduler = BackgroundScheduler()
-    scheduler.add_job(scheduled_task, 'interval', minutes=1)
+    scheduler.add_job(scheduled_task, 'interval', minutes=2)
     scheduler.start()
     logger.info("Scheduler started (interval=1 minutes)")
 

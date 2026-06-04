@@ -5,8 +5,8 @@ import sys
 scripts = [
     # "src/models/random_forest.py",
     # "src/models/lightgbm_model.py",
-    # "src/models/xgboost_model.py",
-    "src/models/svm_model.py",
+    "src/models/xgboost_model.py",
+    # "src/models/svm_model.py",
 ]
 
 for script in scripts:
