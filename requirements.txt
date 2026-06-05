@@ -8,3 +8,5 @@ pyarrow
 pandas
 apscheduler
 pytest
+PyYAML
+requests

@@ -15,8 +15,6 @@ import json
 import yaml
 import logging
 import requests
-import threading
-from collections import defaultdict
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -48,7 +46,6 @@ def setup_file_logger(log_path):
 def select_best_interface():
     """Chọn interface UP với lưu lượng lớn nhất, fallback: interface đầu tiên UP."""
     import psutil
-    import socket
     best_iface = None
     max_bytes = -1
     for name, stats in psutil.net_if_stats().items():
