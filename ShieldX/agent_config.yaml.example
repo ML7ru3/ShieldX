@@ -1,0 +1,17 @@
+# Agent Pipeline Configuration Example
+# Sửa các URL endpoint cho phù hợp với hệ thống của bạn
+
+api:
+  register: "https://your.api/register"
+  heartbeat: "https://your.api/heartbeat"
+  malware_alert: "https://your.api/report-malware"
+  get_whitelist: "https://your.api/domain/whitelist"
+
+heartbeat_interval: 90         # seconds (1.5 phút)
+log_path: "agent.log"          # Đường dẫn file log
+ml_model:
+  path: "ml_model.sock"       # Địa chỉ local model (có thể là path sock, pipe, hay thông tin module)
+interface_scan_interval: 30    # seconds
+
+# Các thông số khác mở rộng trong tương lai
+# ...

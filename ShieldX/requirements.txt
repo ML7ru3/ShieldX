@@ -1,0 +1,12 @@
+psutil
+scikit-learn
+xgboost
+lightgbm
+joblib
+scapy
+pyarrow
+pandas
+apscheduler
+pytest
+PyYAML
+requests

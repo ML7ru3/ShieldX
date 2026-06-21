@@ -1,0 +1,92 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+\section{Specification of use case ``Whitelist Domain Management''}
+
+\textbf{Use case name}: Whitelist Domain Management
+
+\textbf{Actor}: Security Administrator
+
+\textbf{Precondition}: The administrator has network access to the ShieldX-web dashboard.
+
+\textbf{Flow of events}:
+\begin{enumerate}
+    \item The administrator navigates to the Whitelist Domains page via the sidebar.
+    \item The system displays the current list of whitelisted domains in a table.
+    \item To add a new domain:
+    \begin{enumerate}
+        \item The administrator clicks the ``Add Domain'' button.
+        \item A modal dialog appears with input fields for domain name and optional notes.
+        \item The administrator enters the domain (e.g., example.com) and clicks ``Add''.
+        \item The system validates the domain name format and checks for duplicates.
+        \item If valid, the domain is saved to the database and the table updates.
+        \item If duplicate, an error toast notification is displayed.
+    \end{enumerate}
+    \item To edit an existing domain:
+    \begin{enumerate}
+        \item The administrator clicks the ``Edit'' button on the desired row.
+        \item A modal dialog appears pre-filled with the domain's current data.
+        \item The administrator modifies the fields and clicks ``Update''.
+        \item The system validates and saves the changes.
+    \end{enumerate}
+    \item To delete a domain:
+    \begin{enumerate}
+        \item The administrator clicks the ``Delete'' button on the desired row.
+        \item A confirmation dialog appears.
+        \item The administrator confirms deletion.
+        \item The domain is removed from the database and the table updates.
+    \end{enumerate}
+\end{enumerate}
+
+\textbf{Postcondition}: The whitelist is updated in the database and propagated to agents during their next heartbeat cycle.
+
+\section{Specification of use case ``Agent Heartbeat Monitoring''}
+
+\textbf{Use case name}: Agent Heartbeat Monitoring
+
+\textbf{Actor}: ShieldX Agent (primary), Security Administrator (secondary)
+
+\textbf{Precondition}: The agent is running with network connectivity to the backend.
+
+\textbf{Flow of events}:
+\begin{enumerate}
+    \item The agent collects system information (hostname, IP, MAC addresses, OS version).
+    \item The agent sends a POST request to /heartbeat/ with its agent ID and system info.
+    \item The backend checks if the agent ID exists in the database.
+    \item If the agent exists, the backend updates last\_seen to the current timestamp and sets status to ``active''.
+    \item If the agent is new, the backend creates a new Agent record with the provided information.
+    \item The background scheduler periodically marks agents with last\_seen older than 5 minutes as ``offline''.
+    \item The administrator can view the updated agent status on the dashboard.
+\end{enumerate}
+
+\textbf{Postcondition}: The agent's online status is tracked and visible to the administrator.
+
+\section{Specification of use case ``Malware Alert Reporting''}
+
+\textbf{Use case name}: Malware Alert Reporting
+
+\textbf{Actor}: ShieldX Agent (primary), Security Administrator (secondary)
+
+\textbf{Precondition}: The agent has detected a flow classified as malicious by the XGBoost model.
+
+\textbf{Flow of events}:
+\begin{enumerate}
+    \item The agent captures network packets and assembles them into flows.
+    \item For each completed flow, 28 statistical features are extracted.
+    \item The XGBoost model classifies the flow as benign (0) or malicious (1).
+    \item If the flow is classified as malicious:
+    \begin{enumerate}
+        \item The agent logs the detection locally with full flow details.
+        \item The agent sends a POST request to /report-malware/ with agent ID, malware type, and flow features.
+        \item The backend validates the agent ID and creates a MalwareAlert record.
+        \item The backend returns the created alert with its assigned ID.
+    \end{enumerate}
+    \item If the flow is benign, the agent logs the flow as benign and continues monitoring.
+    \item The administrator can view all alerts on the Malware Alerts page.
+\end{enumerate}
+
+\textbf{Alternative flow}: If the backend is unreachable, the agent continues local detection and retries alert transmission on the next heartbeat cycle.
+
+\textbf{Postcondition}: Malicious flows are recorded in the database and visible to the administrator.
+
+\end{document}

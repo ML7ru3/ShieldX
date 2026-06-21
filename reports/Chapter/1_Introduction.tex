@@ -1,0 +1,67 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+\section{Motivation}
+\label{section:1.1}
+
+The rapid expansion of the Internet and the increasing sophistication of cyber threats have made network security one of the most critical challenges of the digital age. Malware, ransomware, phishing, and data exfiltration attacks continue to evolve, exploiting weaknesses in traditional security mechanisms. According to recent cybersecurity reports, thousands of new malware variants are discovered daily, and organizations worldwide face substantial financial and reputational damage from security breaches.
+
+Domain Name System (DNS) is a fundamental protocol of the Internet, responsible for translating human-readable domain names into machine-readable IP addresses. Due to its critical role and historically plaintext nature, DNS traffic has long been a vector for cyber attacks, including DNS tunneling, data exfiltration, and command-and-control (C2) communication. To address the privacy concerns of plaintext DNS, DNS-over-HTTPS (DoH) was introduced as a standard that encrypts DNS queries within HTTPS traffic. While DoH significantly enhances user privacy and prevents eavesdropping, it also introduces new security challenges. Malicious actors can abuse DoH to hide their DNS queries among legitimate encrypted traffic, bypassing traditional network security appliances that rely on inspecting plaintext DNS traffic.
+
+Traditional signature-based intrusion detection systems (IDS) and firewall rules are often insufficient to detect malware communication over DoH because the DNS queries themselves are encrypted. The only observable patterns are statistical features of the network flows, such as packet lengths, inter-arrival times, and byte rates. This makes the problem well-suited for machine learning (ML) approaches, which can learn to distinguish between benign and malicious encrypted traffic patterns based on statistical flow characteristics.
+
+Several research efforts have applied machine learning to the detection of DoH traffic. The CIC-DoHBrw-2020 dataset, published by the Canadian Institute for Cybersecurity, provides a comprehensive collection of labeled benign and malicious DoH traffic flows. Researchers have explored various classifiers, including Random Forest, Support Vector Machines (SVM), and deep learning models, achieving high accuracy in controlled environments. However, most of these solutions remain at the research stage and have not been integrated into a deployable, real-time security agent that can operate on endpoint devices.
+
+Given the gap between academic research and practical deployment, there is a clear need for a lightweight, cross-platform security agent that can (i) capture live network traffic, (ii) extract statistical features from encrypted flows, (iii) apply a pre-trained machine learning model to detect malicious DoH traffic, and (iv) provide a centralized management interface for security administrators. Such a system would bridge the gap between theoretical ML research and operational cybersecurity, making advanced threat detection accessible in real-world environments.
+
+This graduation thesis addresses this need by designing and implementing ShieldX, an intelligent endpoint security agent for malware detection over DNS-over-HTTPS using machine learning. ShieldX combines packet capture, statistical feature extraction, XGBoost-based classification, and a centralized web dashboard into an integrated security solution.
+
+\section{Objectives and scope of the graduation thesis}
+\label{section:1.2}
+
+The primary objective of this thesis is to design, implement, and evaluate a complete system for detecting malware communication over DNS-over-HTTPS using machine learning techniques. The system, named ShieldX, consists of two main components: a lightweight endpoint security agent and a centralized web-based management dashboard.
+
+The specific objectives are as follows:
+\begin{itemize}
+    \item To study the theoretical background of DNS-over-HTTPS, network flow analysis, and machine learning classification techniques relevant to encrypted traffic analysis.
+    \item To survey existing solutions and research for DoH-based malware detection and identify their limitations in terms of real-time deployment and practical usability.
+    \item To design and implement the ShieldX endpoint agent capable of capturing live TLSv1.3 traffic, extracting 28 statistical features from network flows, and classifying them using a pre-trained XGBoost model.
+    \item To design and implement the ShieldX-web centralized dashboard for agent management, malware alert visualization, and domain whitelist administration.
+    \item To evaluate the performance of the XGBoost model on the CIC-DoHBrw-2020 dataset and validate the end-to-end system functionality.
+\end{itemize}
+
+The scope of this thesis encompasses the complete software development life cycle, from requirements analysis and system design to implementation, testing, and deployment. The system is designed for Linux-based endpoints (with extensibility to Windows) and utilizes a MySQL-backed FastAPI backend with a React-based frontend.
+
+\section{Tentative solution}
+\label{section:1.3}
+
+To achieve the stated objectives, this thesis proposes a two-tier system architecture consisting of an endpoint security agent and a centralized web dashboard.
+
+The ShieldX agent is developed in Python and employs Scapy for real-time packet capture on network interfaces. Captured TLSv1.3 packets are grouped into bidirectional flows based on source and destination IP addresses and ports. For each flow, 28 statistical features are extracted, covering packet length statistics, inter-arrival time statistics, response time statistics, and byte-level metrics. These features are fed into an XGBoost classifier that has been trained on the CIC-DoHBrw-2020 dataset. Detected malicious flows trigger alerts that are sent to the central backend via HTTP.
+
+The ShieldX-web dashboard provides a FastAPI REST backend with three core modules: agent heartbeat monitoring, malware alert management, and domain whitelist CRUD operations. A React-based frontend with Chakra UI components offers a responsive and user-friendly interface for security administrators.
+
+The main contributions of this thesis are as follows:
+\begin{itemize}
+    \item A complete, deployable pipeline for real-time DoH malware detection using statistical flow analysis and XGBoost classification.
+    \item A dual-component architecture that separates detection (agent) from management (dashboard), enabling scalable multi-agent deployments.
+    \item A domain whitelist mechanism with nftables integration that enforces allowlist-based network access control on endpoints.
+    \item A public web dashboard providing centralized visibility into agent status, security alerts, and whitelist configuration.
+\end{itemize}
+
+\section{Thesis organization}
+\label{section:1.4}
+
+The remainder of this graduation thesis is organized as follows.
+
+Chapter 2 presents a comprehensive survey of the requirements for the ShieldX system. It analyzes existing solutions for DoH-based malware detection, presents the functional and non-functional requirements, and describes the use case model that drives the system design.
+
+Chapter 3 introduces the theoretical background and technologies underpinning the ShieldX system. It covers DNS-over-HTTPS protocol fundamentals, statistical network flow analysis, the XGBoost machine learning algorithm, and the software tools and frameworks used in the implementation.
+
+Chapter 4 details the design, implementation, and evaluation of both the ShieldX agent and the ShieldX-web dashboard. It presents the software architecture, detailed component design, database design, user interface design, implementation details, testing methodology, and deployment considerations.
+
+Chapter 5 discusses the key solutions and contributions of this thesis, including the integrated detection pipeline, the agent-dashboard architecture, and the domain whitelist enforcement mechanism.
+
+Chapter 6 concludes the thesis by summarizing the achievements, discussing limitations, and outlining directions for future work.
+
+\end{document}

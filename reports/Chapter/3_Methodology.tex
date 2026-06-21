@@ -1,0 +1,132 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+This chapter presents the theoretical background and technologies that underpin the ShieldX system. It covers the DNS-over-HTTPS protocol, statistical network flow analysis, the XGBoost machine learning algorithm, and the key software frameworks used in the implementation. The purpose of this chapter is to provide the reader with the essential knowledge required to understand the design decisions and implementation details presented in subsequent chapters.
+
+\section{DNS-over-HTTPS}
+\label{section:3.1}
+
+\subsection{DNS Protocol Overview}
+
+The Domain Name System (DNS) is a hierarchical naming system that translates human-readable domain names (e.g., www.example.com) into IP addresses. Traditional DNS operates over UDP port 53 and transmits queries and responses in plaintext, making it vulnerable to eavesdropping, spoofing, and manipulation.
+
+\subsection{The Emergence of DoH}
+
+DNS-over-HTTPS (DoH), defined in RFC 8484 \cite{rfc8484}, addresses the privacy limitations of traditional DNS by encapsulating DNS queries and responses within HTTPS traffic. DoH operates over TCP port 443 and uses the standard HTTP/2 or HTTP/3 protocols. This provides several benefits: (i) DNS queries are encrypted, preventing eavesdropping by network intermediaries; (ii) DoH traffic is indistinguishable from regular HTTPS traffic, making it difficult to block; and (iii) DNS queries benefit from the security guarantees of TLS, including server authentication and integrity protection.
+
+Popular DoH providers include Cloudflare (1.1.1.1), Google (8.8.8.8), Quad9 (9.9.9.9), and OpenDNS (208.67.222.222). These services have made DoH widely accessible to end users.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter3/doh_architecture.png}
+    \caption{DNS-over-HTTPS architecture showing the comparison between traditional DNS and encrypted DoH queries}
+    \label{fig:doh_architecture}
+\end{figure}
+
+\subsection{Security Implications of DoH}
+
+While DoH enhances privacy, it also introduces new security challenges. Malware authors can leverage DoH to hide C2 communication from network security tools. Traditional DNS monitoring solutions that rely on analyzing plaintext DNS queries become ineffective against DoH traffic. This creates a detection gap that adversaries can exploit. The only remaining observable characteristics are statistical properties of the network flows, such as packet sizes, timing patterns, and byte rates, which form the basis for the machine-learning approach adopted in this thesis.
+
+\section{Statistical Network Flow Analysis}
+\label{section:3.2}
+
+Network flow analysis involves the examination of metadata extracted from sequences of packets sharing common properties (e.g., same source and destination IP addresses and ports, same protocol). In the context of encrypted traffic classification, where packet payloads are not accessible, statistical features derived from packet headers and timing provide the primary source of discriminative information.
+
+\subsection{Network Flow Features}
+
+The ShieldX system extracts 28 statistical features from each bidirectional TCP flow. These features are grouped into four categories:
+
+\paragraph{Bytes-level features (4 features):} FlowBytesSent, FlowSentRate, FlowBytesReceived, FlowReceivedRate. These measure the volume and rate of data transmitted in each direction.
+
+\paragraph{Packet length features (8 features):} These describe the distribution of packet payload lengths within a flow. The computed statistics include variance, standard deviation, mean, median, mode, skewness from median, skewness from mode, and coefficient of variation. Malicious traffic often exhibits different packet length distributions compared to benign traffic due to the nature of C2 communication and data exfiltration.
+
+\paragraph{Packet time features (8 features):} These describe the distribution of inter-arrival times between consecutive packets. The same eight statistical measures are computed. Timing patterns can reveal automated communication behavior characteristic of malware.
+
+\paragraph{Response time features (8 features):} These describe the time differences between consecutive forward-reverse packet pairs, capturing server responsiveness patterns.
+
+The selection of these 28 features is based on the CIC-DoHBrw-2020 dataset \cite{montazeri2020doh} and prior research demonstrating their effectiveness for encrypted traffic classification.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter3/feature_extraction_pipeline.png}
+    \caption{Feature extraction pipeline: from raw packets to 28 statistical features per flow}
+    \label{fig:feature_extraction}
+\end{figure}
+
+\section{XGBoost}
+\label{section:3.3}
+
+\subsection{Gradient Boosting}
+
+Gradient boosting is an ensemble machine learning technique that builds a strong classifier by combining multiple weak learners (typically decision trees) in an additive manner. At each iteration, a new tree is trained to predict the residual errors of the current ensemble, effectively minimizing a differentiable loss function through gradient descent.
+
+\subsection{XGBoost Algorithm}
+
+XGBoost (Extreme Gradient Boosting) \cite{chen2016xgboost} is an optimized implementation of gradient boosting that has become one of the most widely used algorithms in machine learning competitions and industrial applications. XGBoost offers several advantages over traditional gradient boosting:
+
+\begin{itemize}
+    \item \textbf{Regularization}: XGBoost includes L1 (Lasso) and L2 (Ridge) regularization in its objective function, which helps prevent overfitting and improves generalization.
+    \item \textbf{Tree pruning}: Unlike traditional gradient boosting that grows trees to a fixed depth and then prunes, XGBoost grows trees greedily and prunes them based on loss reduction, leading to more efficient trees.
+    \item \textbf{Handling missing values}: XGBoost learns default branch directions for missing values, eliminating the need for explicit imputation.
+    \item \textbf{Parallelization}: The algorithm is designed for efficient parallel computation, significantly reducing training time.
+    \item \textbf{Cross-validation}: Built-in cross-validation at each iteration eliminates the need for a separate cross-validation pipeline.
+\end{itemize}
+
+\subsection{Why XGBoost for DoH Detection}
+
+XGBoost was selected as the primary classifier for ShieldX for several reasons:
+\begin{itemize}
+    \item It achieves state-of-the-art performance on tabular data, which is the format of the 28 statistical features.
+    \item Previous studies on the CIC-DoHBrw-2020 dataset have shown that gradient-boosted trees achieve accuracy comparable to or exceeding deep learning approaches while requiring significantly fewer computational resources.
+    \item The trained model is lightweight (a few megabytes) and portable, making it suitable for deployment on endpoint devices with limited resources.
+    \item The model produces interpretable feature importance scores, enabling analysis of which statistical features are most discriminative.
+\end{itemize}
+
+The ShieldX XGBoost model is configured with 200 trees (n\_estimators) and a maximum depth of 6, which balances model capacity with inference speed.
+
+\section{Technologies}
+\label{section:3.4}
+
+\subsection{Python and Scapy}
+
+Python was chosen as the primary development language for the ShieldX agent due to its extensive ecosystem of networking and machine learning libraries. Scapy \cite{scapy} is a Python library for packet manipulation and capture that provides a powerful API for crafting, sending, receiving, and analyzing network packets. ShieldX uses Scapy's AsyncSniffer for non-blocking packet capture on network interfaces, enabling concurrent packet processing and classification.
+
+\subsection{FastAPI}
+
+FastAPI \cite{fastapi} is a modern, high-performance web framework for building APIs with Python. It leverages Python type hints for automatic request validation and documentation generation. In ShieldX, FastAPI serves as the backend framework for the central management API, providing endpoints for agent registration, heartbeat monitoring, malware alert reporting, and domain whitelist management.
+
+\subsection{SQLModel and MySQL}
+
+SQLModel \cite{sqlmodel} is an Object-Relational Mapping (ORM) library that combines SQLAlchemy and Pydantic into a unified API. It allows defining database models as Python classes with automatic validation and serialization. ShieldX uses SQLModel with a MySQL database for persistent storage of agent records, malware alerts, and whitelist domains.
+
+\subsection{React and Chakra UI}
+
+React is a JavaScript library for building user interfaces, while Chakra UI provides a component library with a focus on accessibility and developer experience. ShieldX-web's frontend is built as a React single-page application (SPA) using Vite as the build tool. Chakra UI provides pre-built components for layout, forms, tables, and notifications, enabling rapid development of a professional-grade dashboard.
+
+\subsection{nftables}
+
+nftables is the successor to iptables in the Linux kernel, providing a framework for packet filtering and classification. ShieldX uses nftables to enforce domain whitelists on agent endpoints. When the whitelist is updated, the agent resolves whitelisted domains to IP addresses and creates nftables rules that accept traffic to those IPs while dropping all other outbound traffic.
+
+\subsection{CIC-DoHBrw-2020 Dataset}
+
+The CIC-DoHBrw-2020 dataset \cite{montazeri2020doh} is the primary dataset used for training and evaluating the ShieldX detection model. It contains 499,106 labeled network flows with 28 statistical features, covering both benign and malicious DoH traffic scenarios. The malicious traffic includes various malware types such as ransomware, trojans, and botnets communicating via C2 channels over DoH.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Property} & \textbf{Value} \\
+\hline
+Number of flows & 499,106 \\
+Number of features & 28 \\
+Classes & Benign, Malicious \\
+Year published & 2020 \\
+Source & Canadian Institute for Cybersecurity (CIC) \\
+\hline
+\end{tabular}
+\caption{Summary of the CIC-DoHBrw-2020 dataset}
+\label{tab:dataset_summary}
+\end{table}
+
+\end{document}

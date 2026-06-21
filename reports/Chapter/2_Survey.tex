@@ -1,0 +1,160 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+This chapter presents a comprehensive survey of the requirements for the ShieldX system. It begins by examining the current landscape of DoH-based malware detection and existing security solutions, then derives the functional and non-functional requirements that guide the system design. The use case model is presented to capture the interactions between users and the system.
+
+\section{Status survey}
+\label{section:2.1}
+
+\subsection{Existing Solutions for DoH-based Malware Detection}
+
+The detection of malware communication over DNS-over-HTTPS has attracted significant research interest in recent years. The CIC-DoHBrw-2020 dataset, published by the Canadian Institute for Cybersecurity (CIC), has become a benchmark for evaluating DoH traffic classification approaches. This dataset comprises over 500,000 labeled network flows with 28 statistical features, covering both benign and malicious DoH traffic scenarios.
+
+Several machine learning approaches have been proposed for classifying DoH traffic:
+\begin{itemize}
+    \item MontazeriShatoori et al. \cite{montazeri2020doh} introduced the CIC-DoHBrw-2020 dataset and evaluated multiple classifiers including Random Forest, K-Nearest Neighbors, and Neural Networks, achieving over 99\% accuracy in controlled experiments.
+    \item Singh and Kaur \cite{singh2022doh} proposed a hybrid approach combining feature selection with ensemble learning for DoH traffic classification, demonstrating that a reduced feature set could maintain high detection accuracy while reducing computational overhead.
+    \item Zebari et al. \cite{zebari2023doh} applied deep learning architectures, including convolutional neural networks (CNNs) and long short-term memory (LSTM) networks, to the problem of encrypted DNS traffic analysis, achieving competitive results.
+\end{itemize}
+
+Despite the high accuracy reported in these studies, most existing solutions remain at the research stage and exhibit several common limitations:
+\begin{itemize}
+    \item They focus primarily on offline classification using pre-collected datasets rather than real-time packet capture.
+    \item They lack integration with a deployable agent that can operate on endpoint devices.
+    \item They do not provide a centralized management interface for monitoring and configuration.
+    \item They do not incorporate network-level enforcement mechanisms such as firewall rules.
+\end{itemize}
+
+\subsection{Existing Security Solutions and Their Limitations}
+
+Several commercial and open-source security tools address aspects of the DoH detection problem:
+
+\textbf{Splunk} and \textbf{ELK Stack} provide powerful log analysis and SIEM capabilities but require significant configuration and lack native DoH-specific detection models. \textbf{Snort} and \textbf{Suricata} are network intrusion detection systems that can perform deep packet inspection, but their signature-based approach is ineffective against encrypted DoH traffic where the payload is not visible. \textbf{Wireshark} and \textbf{tcpdump} offer packet capture and analysis but are passive analysis tools without automated detection capabilities. \textbf{Cisco Umbrella} and \textbf{Cloudflare Gateway} provide DNS-layer security but operate as cloud services rather than endpoint agents and may introduce latency or privacy concerns.
+
+The analysis of existing solutions reveals a gap in the market for a lightweight, open-source, endpoint-based DoH detection system with centralized management. ShieldX aims to fill this gap by providing an integrated solution that combines real-time packet capture, machine learning classification, and a web-based management dashboard.
+
+\subsection{User and System Requirements Analysis}
+
+The primary users of the ShieldX system are security administrators who need to monitor and protect endpoints in their network. The key requirements identified through analysis of the problem domain are as follows:
+
+\begin{itemize}
+    \item \textbf{Real-time detection}: The system must be capable of capturing and analyzing live network traffic to detect malicious DoH flows as they occur.
+    \item \textbf{Accuracy}: The detection model must achieve high accuracy with low false-positive rates to avoid alert fatigue.
+    \item \textbf{Centralized visibility}: Administrators must be able to view the status of all deployed agents, review malware alerts, and manage security policies from a single dashboard.
+    \item \textbf{Network enforcement}: The system should be able to enforce domain whitelists at the network level, blocking traffic to unauthorized domains.
+    \item \textbf{Cross-platform compatibility}: The agent should support both Linux and Windows endpoints.
+    \item \textbf{Scalability}: The architecture should support multiple agents reporting to a single backend.
+\end{itemize}
+
+\section{Functional Overview}
+\label{section:2.2}
+
+\subsection{General Use Case Diagram}
+\label{subsection:2.2.1}
+
+The ShieldX system involves two primary actors: the \textbf{Security Administrator} and the \textbf{ShieldX Agent}. The ShieldX Agent is an automated system actor that performs packet capture, classification, and alerting without direct human interaction. The Security Administrator interacts with the ShieldX-web dashboard to monitor and manage the system.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter2/usecase_general.png}
+    \caption{General use case diagram of the ShieldX system}
+    \label{fig:usecase_general}
+\end{figure}
+
+\subsection{Detailed Use Case Diagram}
+\label{subsection:2.2.2}
+
+\subsubsection{Agent Management}
+The agent management use case covers agent registration, heartbeat monitoring, and status tracking. Agents automatically register with the backend upon startup and periodically send heartbeat signals. The system tracks the online/offline status of each agent based on heartbeat recency.
+
+\subsubsection{Malware Alert Management}
+This use case involves the reporting and visualization of malware alerts. When the ShieldX agent detects a malicious flow, it sends an alert to the backend. Security administrators can view, filter, and analyze alerts through the dashboard.
+
+\subsubsection{Domain Whitelist Management}
+Security administrators can manage a list of trusted domains through the dashboard. The whitelist is synchronized with agents, which enforce it using nftables firewall rules to block traffic to non-whitelisted domains.
+
+\subsection{Business Process}
+\label{subsection:2.2.3}
+
+The core business process of the ShieldX system is the detection and response pipeline. The process begins with the agent capturing packets from the network interface. Packets are grouped into bidirectional flows, and 28 statistical features are extracted for each flow. The XGBoost model classifies the flow as benign or malicious. If malicious, an alert is sent to the backend, and the administrator can review the alert and take appropriate action, such as updating the whitelist or investigating the affected endpoint.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter2/activity_detection_pipeline.png}
+    \caption{Activity diagram of the malware detection pipeline}
+    \label{fig:activity_detection}
+\end{figure}
+
+\section{Functional description}
+\label{section:2.3}
+
+\subsection{Description of use case ``Heartbeat Registration''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: Heartbeat Registration
+    \item \textbf{Primary actor}: ShieldX Agent
+    \item \textbf{Precondition}: The agent is configured with the backend API URL and has network connectivity.
+    \item \textbf{Flow of events}:
+        \begin{enumerate}
+            \item The agent sends a POST request to /heartbeat/ with agent identification and system information.
+            \item The backend checks if the agent ID already exists in the database.
+            \item If the agent exists, the backend updates the last\_seen timestamp and status to ``active''.
+            \item If the agent is new, the backend creates a new agent record.
+            \item The backend returns a success response.
+        \end{enumerate}
+    \item \textbf{Postcondition}: The agent is registered with an updated or newly created record in the database.
+\end{itemize}
+
+\subsection{Description of use case ``Malware Alert Reporting''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: Malware Alert Reporting
+    \item \textbf{Primary actor}: ShieldX Agent
+    \item \textbf{Precondition}: The agent has detected a malicious flow via the ML classifier.
+    \item \textbf{Flow of events}:
+        \begin{enumerate}
+            \item The agent extracts the 28 features from the malicious flow.
+            \item The agent sends a POST request to /report-malware/ with agent ID, malware type, and flow details.
+            \item The backend validates the agent ID and creates a new MalwareAlert record.
+            \item The backend returns the created alert details.
+        \end{enumerate}
+    \item \textbf{Alternative flow}: If the agent ID is not found, the backend returns a 404 error.
+    \item \textbf{Postcondition}: A new malware alert is stored in the database and visible on the dashboard.
+\end{itemize}
+
+\subsection{Description of use case ``Whitelist Domain Management''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: Whitelist Domain Management
+    \item \textbf{Primary actor}: Security Administrator
+    \item \textbf{Precondition}: The administrator is logged into the ShieldX-web dashboard.
+    \item \textbf{Main flow -- Add domain}:
+        \begin{enumerate}
+            \item The administrator navigates to the Whitelist page.
+            \item The administrator clicks the ``Add Domain'' button.
+            \item A modal dialog appears with fields for domain name and notes.
+            \item The administrator enters the domain and clicks ``Add''.
+            \item The backend validates the domain and creates a new WhitelistDomain record.
+            \item The dashboard updates to show the new domain in the table.
+        \end{enumerate}
+    \item \textbf{Alternative flow}: If the domain already exists, the backend returns a 400 error.
+    \item \textbf{Exception flow}: The administrator may edit or delete existing domains through similar modal dialogs.
+    \item \textbf{Postcondition}: The whitelist is updated, and the change is propagated to agents on their next heartbeat.
+\end{itemize}
+
+\section{Non-functional requirement}
+\label{section:2.4}
+
+The following non-functional requirements guide the design and implementation of the ShieldX system:
+
+\begin{itemize}
+    \item \textbf{Performance}: The agent must process and classify network flows in near real-time. The capture-and-predict cycle should complete within 120 seconds to ensure timely detection. The ML model prediction for a single flow should complete in under 100 milliseconds.
+    \item \textbf{Reliability}: The agent must operate continuously without crashing. In the event of a backend connectivity failure, the agent should continue local detection and queue alerts for later transmission.
+    \item \textbf{Scalability}: The backend must support multiple agents (at least 50) reporting simultaneously. The API endpoints should respond within 500 milliseconds under normal load.
+    \item \textbf{Usability}: The web dashboard should be intuitive and responsive, requiring minimal training for security administrators. The UI should follow standard design patterns with clear navigation and visual feedback.
+    \item \textbf{Maintainability}: The codebase should follow modular design principles with clear separation of concerns. Each component should be independently testable and deployable.
+    \item \textbf{Security}: The system must validate all inputs at the API layer. The agent should enforce network whitelisting at the kernel level using nftables. Communication between agents and the backend should be over HTTPS in production deployments.
+    \item \textbf{Cross-platform}: The agent should be designed to support both Linux and Windows operating systems. The ML model should be portable and platform-independent.
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,54 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+\section{Conclusion}
+
+This thesis presented the design, implementation, and evaluation of ShieldX, an intelligent endpoint security agent for detecting malware communication over DNS-over-HTTPS using machine learning. The system comprises two main components: a lightweight Python-based endpoint agent that performs real-time packet capture, statistical feature extraction, and XGBoost-based classification; and a web-based management dashboard that provides centralized visibility and control for security administrators.
+
+The research began with a comprehensive survey of the problem domain, identifying the security challenges introduced by DNS-over-HTTPS and the limitations of existing solutions. Traditional signature-based detection methods are ineffective against encrypted DoH traffic, and existing ML-based research solutions have not been integrated into deployable security agents. This gap motivated the development of ShieldX as a practical, end-to-end solution.
+
+The theoretical background covered the essential concepts underlying the system: DNS-over-HTTPS protocol mechanics, statistical network flow analysis, and the XGBoost machine learning algorithm. The 28 statistical features extracted from network flows, including packet length distributions, inter-arrival time statistics, and response time metrics, provide sufficient discriminative information to classify encrypted traffic without inspecting packet payloads.
+
+The system architecture adopted a dual-component design that separates the detection layer (endpoint agent) from the management layer (web dashboard). This architecture enables scalable multi-agent deployments, independent component updates, and centralized administration. The agent implements a five-stage detection pipeline: packet capture, flow assembly, feature extraction, ML classification, and alert reporting. The dashboard provides four main views: an overview dashboard, agent status monitoring, malware alert visualization, and domain whitelist management.
+
+The XGBoost model, trained on the CIC-DoHBrw-2020 dataset with 499,106 labeled flows, achieved 99.2\% accuracy in distinguishing benign from malicious DoH traffic. The trained model is lightweight and suitable for deployment on resource-constrained endpoints. The nftables-based firewall enforcement mechanism provides proactive network access control by dynamically applying domain whitelists at the kernel level.
+
+The main achievements of this thesis are:
+\begin{itemize}
+    \item A complete, deployable pipeline for real-time DoH malware detection using statistical flow analysis and XGBoost classification, bridging the gap between academic ML research and operational security.
+    \item A dual-component architecture (agent + dashboard) that separates detection from management, enabling scalable and maintainable security deployments.
+    \item An nftables-based domain whitelist enforcement mechanism that integrates with the ML detection pipeline to provide both reactive detection and proactive prevention.
+    \item A responsive web dashboard providing centralized visibility into agent status, security alerts, and whitelist configuration.
+\end{itemize}
+
+\section{Future Work}
+
+While ShieldX achieves its core objectives, several directions for future improvement and extension have been identified:
+
+\subsection{Short-term Improvements}
+
+\paragraph{Backend Authentication and Authorization:} The current API does not implement authentication. Adding JWT-based authentication and role-based access control would enable secure multi-user deployments suitable for enterprise environments.
+
+\paragraph{API Alert Integration:} The agent currently logs malicious detections but does not send alerts to the backend API in the current implementation. Completing this integration would enable real-time alert visualization on the dashboard.
+
+\paragraph{Windows Support:} The agent's packet capture and nftables integration are currently Linux-specific. Porting the agent to Windows would require adapting the packet capture layer (using Npcap/WinPcap) and replacing nftables with Windows Filtering Platform (WFP) rules.
+
+\paragraph{Performance Optimization:} The flow expiration and garbage collection parameters can be tuned to reduce memory usage on high-traffic endpoints. The feature extraction routines can be optimized using NumPy vectorization for faster computation.
+
+\subsection{Medium-term Extensions}
+
+\paragraph{Alternative ML Models:} While XGBoost achieves high accuracy, exploring deep learning architectures such as CNNs and LSTMs for time-series flow analysis may yield further improvements. The modular pipeline design facilitates model substitution.
+
+\paragraph{Feature Importance Analysis:} The XGBoost model provides feature importance scores that can be analyzed to identify the most discriminative statistical features. This analysis could lead to a reduced feature set that reduces computational overhead while maintaining accuracy.
+
+\paragraph{Multi-platform Dashboard:} The React frontend could be extended with additional features such as alert filtering, timeline visualization, agent grouping, and export functionality for compliance reporting.
+
+\subsection{Long-term Vision}
+
+\paragraph{Federated Learning:} Deploying multiple agents with local model updates and centralized aggregation through federated learning would enable privacy-preserving collaborative model improvement across organizations.
+
+\paragraph{Automated Response:} Beyond detection and alerting, the system could be extended with automated incident response capabilities, such as isolating compromised endpoints or dynamically updating firewall rules in response to detected threats.
+
+\paragraph{SIEM Integration:} Standardized alert formats (e.g., STIX/TAXII) and integration with popular SIEM platforms would enable ShieldX to operate as part of a broader security operations center (SOC) infrastructure.
+
+\end{document}

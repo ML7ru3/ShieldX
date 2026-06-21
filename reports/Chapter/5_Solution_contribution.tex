@@ -1,0 +1,87 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+This chapter presents the key solutions and contributions of this thesis. Each contribution is presented in its own section with an introduction to the problem it addresses, the proposed solution, and the achieved results. The three main contributions are: the integrated DoH malware detection pipeline, the dual-component agent-dashboard architecture, and the nftables-based domain whitelist enforcement mechanism.
+
+\section{Integrated DoH Malware Detection Pipeline}
+
+\subsection{Problem}
+
+Existing research on DoH-based malware detection has focused primarily on offline classification accuracy using pre-collected datasets. While these studies demonstrate the theoretical feasibility of detecting malicious DoH traffic through statistical flow features, they do not provide a complete, deployable pipeline that can operate in real-time on endpoint devices. The gap between research and deployment means that even highly accurate models remain inaccessible to practitioners who need operational security tools.
+
+\subsection{Solution}
+
+The ShieldX agent implements an end-to-end detection pipeline that bridges this gap. The pipeline integrates five stages into a single executable process:
+
+\begin{itemize}
+    \item \textbf{Packet Capture}: Using Scapy's AsyncSniffer, the agent captures live TLSv1.3 traffic from the network interface without interrupting the system's network operations.
+    \item \textbf{Flow Assembly}: Captured packets are grouped into bidirectional flows using a custom FlowSession implementation with configurable expiration and garbage collection parameters.
+    \item \textbf{Feature Extraction}: For each completed flow, 28 statistical features are computed using optimized Python classes that calculate bytes-level, packet length, packet time, and response time statistics.
+    \item \textbf{ML Classification}: Features are passed to a pre-trained XGBoost model that classifies the flow as benign or malicious in under 100 milliseconds.
+    \item \textbf{Alert Reporting}: Malicious detections are logged locally and reported to the central backend via HTTP for centralized visibility.
+\end{itemize}
+
+The pipeline is designed for continuous operation. The agent runs in a loop, periodically capturing packets (configurable duration, default 120 seconds), processing accumulated flows, sending alerts, and optionally sleeping to reduce resource consumption. The APScheduler library manages the scheduling of capture rounds and heartbeat signals.
+
+\subsection{Result}
+
+The integrated pipeline successfully demonstrates real-time DoH malware detection on endpoint devices. The XGBoost model achieves 99.2\% accuracy on the CIC-DoHBrw-2020 test set, with a prediction latency of under 100 milliseconds per flow. The complete capture-and-classify cycle completes within the configured sniff duration, enabling near-real-time detection. The pipeline is designed to be extensible: alternative ML models (Random Forest, SVM, LightGBM) have also been implemented and can be substituted with minimal code changes.
+
+\section{Dual-Component Agent-Dashboard Architecture}
+
+\subsection{Problem}
+
+Many security solutions are monolithic, combining detection, management, and visualization in a single application. This approach limits scalability and makes it difficult to manage multiple endpoints from a central location. Security administrators need a system where distributed agents operate autonomously on endpoints while a centralized dashboard provides unified visibility and control.
+
+\subsection{Solution}
+
+The ShieldX system adopts a dual-component architecture with clear separation of concerns:
+
+\paragraph{ShieldX Agent (Detection Layer):} The agent is a lightweight Python application designed to run on individual endpoints. It operates autonomously, performing packet capture, feature extraction, and classification without relying on continuous backend connectivity. If the backend is temporarily unavailable, the agent continues local detection and queues alerts for later transmission. Each agent registers with the backend on startup and sends periodic heartbeats to report its status.
+
+\paragraph{ShieldX-web (Management Layer):} The web platform consists of a FastAPI backend and a React frontend. The backend provides REST API endpoints for agent registration, heartbeat monitoring, malware alert ingestion, and domain whitelist CRUD operations. The frontend offers a responsive dashboard with four main pages: an overview dashboard, agent list, malware alerts table, and whitelist management interface.
+
+The communication between the two components follows a simple RESTful HTTP protocol:
+\begin{itemize}
+    \item \texttt{POST /heartbeat/}: Agent registration and periodic heartbeat.
+    \item \texttt{POST /report-malware/}: Malware detection alert.
+    \item \texttt{GET /domain/whitelist/}: Retrieve the current whitelist.
+    \item \texttt{POST/PUT/DELETE /domain/whitelist/}: Administrator whitelist management.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter5/agent_dashboard_communication.png}
+    \caption{Communication flow between agents and the dashboard}
+    \label{fig:agent_dashboard_comm}
+\end{figure}
+
+\subsection{Result}
+
+The dual-component architecture provides a scalable and maintainable security solution. A single ShieldX-web backend can manage multiple ShieldX agents deployed across different endpoints. The clear separation of detection and management concerns simplifies development, testing, and deployment. Each component can be updated independently without affecting the other. The API-based communication ensures interoperability and enables future extensions, such as integration with external security information and event management (SIEM) systems.
+
+\section{nftables-based Domain Whitelist Enforcement}
+
+\subsection{Problem}
+
+Detecting malicious traffic is only one part of endpoint security. An effective security system must also be able to prevent communication with known malicious or unauthorized domains. Traditional approaches rely on host-based firewalls with static rules, but these require manual configuration and do not integrate with the detection pipeline. Furthermore, enterprise environments often maintain lists of approved domains that endpoints should be allowed to access, and enforcing these lists at the network level prevents data exfiltration and C2 communication.
+
+\subsection{Solution}
+
+The ShieldX agent integrates with the Linux nftables firewall subsystem to enforce domain whitelists dynamically. The FirewallManager component provides the following capabilities:
+
+\begin{itemize}
+    \item \textbf{Whitelist Retrieval}: The agent fetches the current whitelist from the backend API during each heartbeat cycle.
+    \item \textbf{DNS Resolution}: Each whitelisted domain is resolved to its IP addresses using standard DNS resolution.
+    \item \textbf{nftables Rule Generation}: The agent creates an nftables table named "shieldx" with a chain on the output hook. The chain implements a default-drop policy and only accepts traffic to IP addresses derived from whitelisted domains, plus essential traffic (loopback and established connections).
+    \item \textbf{Policy Flush}: When the whitelist is updated, the agent flushes the existing nftables table and recreates the rules with the new domain set.
+    \item \textbf{Sanitization}: Domain names are sanitized to remove protocol prefixes and paths before resolution.
+\end{itemize}
+
+The firewall enforcement operates at the kernel level, providing strong security guarantees that user-space applications cannot bypass. The default-drop approach ensures that only explicitly approved domains can be reached, creating a least-privilege network access model.
+
+\subsection{Result}
+
+The nftables-based firewall enforcement provides an effective network access control mechanism that complements the ML-based detection pipeline. While the detection pipeline identifies malicious traffic after it occurs, the firewall prevents communication with non-whitelisted domains proactively. The integration with the backend API means that administrators can update the whitelist centrally through the dashboard, and the changes are propagated to all agents during their next heartbeat cycle. The implementation uses the modern nftables framework, which is the default firewall subsystem in recent Linux distributions and offers better performance and a more consistent API than the legacy iptables system.
+
+\end{document}

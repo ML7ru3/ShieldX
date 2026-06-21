@@ -1,0 +1,336 @@
+\documentclass[../Main.tex]{subfiles}
+\begin{document}
+
+This chapter presents the complete design, implementation, and evaluation of the ShieldX system. It begins with the architectural design of the overall system, followed by detailed design of both the endpoint agent and the web dashboard. The implementation details, including the technologies used, achieved results, and user interface illustrations, are then presented. Finally, the testing methodology, experimental results, and deployment considerations are discussed.
+
+\section{Architecture design}
+
+\subsection{Software architecture selection}
+\label{section:4.1.1}
+
+The ShieldX system adopts a \textbf{two-tier client-server architecture} with elements of the \textbf{microservices} pattern. The architecture separates the system into two major components: the endpoint agent (ShieldX Agent) and the centralized management server (ShieldX-web). This separation provides several advantages:
+
+\begin{itemize}
+    \item \textbf{Scalability}: Multiple agents can be deployed across different endpoints, all reporting to a single backend server.
+    \item \textbf{Independent deployment}: The agent and backend can be updated, tested, and deployed independently.
+    \item \textbf{Centralized management}: Security administrators gain unified visibility into all agents through the web dashboard.
+    \item \textbf{Fault isolation}: A failure in the backend does not affect agent operation (agents continue local detection and can queue alerts).
+\end{itemize}
+
+The agent follows a \textbf{pipeline architecture} internally, where packets flow through a sequence of processing stages: capture, flow assembly, feature extraction, classification, and alerting. The backend follows a \textbf{layered architecture} with separate layers for API routing, business logic, data access, and persistence.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/system_architecture.png}
+    \caption{High-level system architecture of ShieldX}
+    \label{fig:system_architecture}
+\end{figure}
+
+\subsection{Overall design}
+\label{section:4.1.2}
+
+The system comprises the following packages, organized into distinct architectural tiers:
+
+\begin{itemize}
+    \item \textbf{shieldx-agent}: The endpoint agent package containing sub-packages for packet processing (packet\_processing), domain logic (domains), model inference (models), configuration (config), and the agent orchestrator.
+    \item \textbf{shieldx-web-backend}: The FastAPI backend package containing sub-packages for API routes (api/v1/endpoints), service layer (services), data models (models), middleware (middleware), and utility functions (utils).
+    \item \textbf{shieldx-web-frontend}: The React frontend package containing page components (pages), API client (api.ts), type definitions (types.ts), and theme configuration (theme.ts).
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/package_diagram.png}
+    \caption{Package dependency diagram of the ShieldX system}
+    \label{fig:package_diagram}
+\end{figure}
+
+\subsection{Detailed package design}
+\label{section:4.1.3}
+
+\subsubsection{Agent Packet Processing Package}
+
+The \texttt{packet\_processing} package is the core of the agent's detection capability. It contains:
+
+\begin{itemize}
+    \item \texttt{FlowSession}: A custom Scapy session that intercepts packets, groups them into bidirectional flows, and manages flow lifecycle including creation, update, expiration, and garbage collection.
+    \item \texttt{Flow}: Represents a single bidirectional network flow and provides the \texttt{get\_data()} method that computes the 28 statistical features.
+    \item \texttt{Features}: A set of classes (\texttt{FlowBytes}, \texttt{PacketLength}, \texttt{PacketTime}, \texttt{ResponseTime}) that compute specific groups of statistical features.
+    \item \texttt{TimeSeries}: Classes for clump-based time-series analysis (an alternative representation of flow data).
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/class_diagram_agent.png}
+    \caption{Class diagram of the ShieldX agent packet processing package}
+    \label{fig:class_diagram_agent}
+\end{figure}
+
+\subsubsection{Backend API Package}
+
+The backend package follows FastAPI conventions:
+
+\begin{itemize}
+    \item \texttt{main.py}: Application factory with lifespan management, CORS configuration, and router registration.
+    \item \texttt{database.py}: SQLModel engine and session factory for MySQL connectivity.
+    \item \texttt{models.py}: ORM classes for Agent, MalwareAlert, and WhitelistDomain.
+    \item \texttt{routes/heartbeat.py}: Agent registration and heartbeat endpoints.
+    \item \texttt{routes/malware.py}: Malware alert ingestion and listing endpoints.
+    \item \texttt{routes/whitelist.py}: CRUD endpoints for whitelist domain management.
+\end{itemize}
+
+\subsubsection{Frontend Package}
+
+The frontend follows a page-based SPA architecture:
+
+\begin{itemize}
+    \item \texttt{App.tsx}: Root component with sidebar navigation and page routing via state.
+    \item \texttt{pages/Dashboard.tsx}: Summary statistics with agent count, alert count, and domain count.
+    \item \texttt{pages/Agents.tsx}: Agent list table with status indicators.
+    \item \texttt{pages/MalwareAlerts.tsx}: Malware alerts table with details.
+    \item \texttt{pages/Whitelist.tsx}: Full CRUD table with modal dialogs for domain management.
+    \item \texttt{api.ts}: Axios HTTP client with typed API functions.
+\end{itemize}
+
+\section{Detailed design}
+
+\subsection{User interface design}
+\label{section:4.2.1}
+
+The ShieldX-web dashboard is designed for security administrators who need to monitor multiple agents and respond to threats efficiently. The UI follows these design principles:
+
+\begin{itemize}
+    \item \textbf{Responsive layout}: The interface adapts to different screen sizes using Chakra UI's responsive grid system.
+    \item \textbf{Dark/Light mode}: Users can toggle between dark and light themes based on their preference.
+    \item \textbf{Consistent navigation}: A fixed sidebar provides access to all four main pages with clear icon-based navigation.
+    \item \textbf{Visual feedback}: Loading states, error messages, and success notifications provide immediate feedback for all user actions.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_dashboard.png}
+    \caption{Dashboard page showing summary statistics}
+    \label{fig:ui_dashboard}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_agents.png}
+    \caption{Agents management page showing registered agents and their status}
+    \label{fig:ui_agents}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_alerts.png}
+    \caption{Malware alerts page showing detected threats}
+    \label{fig:ui_alerts}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_whitelist.png}
+    \caption{Whitelist domain management page}
+    \label{fig:ui_whitelist}
+\end{figure}
+
+\subsection{Layer design}
+\label{section:4.2.2}
+
+The agent pipeline is designed as a sequence of processing stages, each encapsulated in a dedicated module:
+
+\paragraph{Stage 1 -- Packet Capture:} The \texttt{AsyncSniffer} from Scapy captures packets from the network interface. It runs in a background thread and passes captured packets to the \texttt{FlowCollector} (a subclass of \texttt{FlowSession}) for processing.
+
+\paragraph{Stage 2 -- Flow Assembly:} The \texttt{FlowCollector} groups captured packets into bidirectional flows. A flow is identified by the tuple (source IP, source port, destination IP, destination port). The \texttt{Flow} object maintains a list of packets with their direction annotations (FORWARD or REVERSE).
+
+\paragraph{Stage 3 -- Feature Extraction:} When a flow expires (after 40 seconds of inactivity or exceeding 120 seconds duration), the \texttt{Flow.get\_data()} method computes the 28 statistical features from the stored packets.
+
+\paragraph{Stage 4 -- Classification:} The feature vector is passed to the pre-trained XGBoost model, which returns a prediction (0 for benign, 1 for malicious). The model is loaded lazily and cached for subsequent predictions.
+
+\paragraph{Stage 5 -- Alerting:} If the prediction is malicious, the agent sends a POST request to the backend's /report-malware/ endpoint with the flow details.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/sequence_detection.png}
+    \caption{Sequence diagram of the malware detection pipeline}
+    \label{fig:sequence_detection}
+\end{figure}
+
+\subsection{Database design}
+\label{section:4.2.3}
+
+The system uses a MySQL database with three tables:
+
+\paragraph{Agent table:} Stores information about each registered ShieldX agent, including its unique ID, hostname, IP address, first and last seen timestamps, and current status (active/offline).
+
+\paragraph{MalwareAlert table:} Stores reports of detected malicious flows, with references to the reporting agent, malware type classification, detailed flow features, and detection timestamp.
+
+\paragraph{WhitelistDomain table:} Stores the list of trusted domains that agents should allow traffic to. Each entry includes the domain name, optional notes, and the date added.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter4/er_diagram.png}
+    \caption{Entity-Relationship diagram of the ShieldX database}
+    \label{fig:er_diagram}
+\end{figure}
+
+\section{Application Building}
+
+\subsection{Libraries and Tools}
+\label{section:4.3.1}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Purpose} & \textbf{Tool} & \textbf{Version} \\
+\hline
+Programming Language (Agent) & Python & 3.10+ \\
+Packet Capture & Scapy & Latest \\
+ML Framework & XGBoost & 1.x \\
+Task Scheduling & APScheduler & 3.11.0 \\
+Backend Framework & FastAPI & 0.136.3 \\
+ASGI Server & Uvicorn & 0.49.0 \\
+ORM & SQLModel & 0.0.38 \\
+Database & MySQL & 8.0 \\
+Frontend Framework & React & 19.2.6 \\
+Build Tool & Vite & 8.0.12 \\
+UI Component Library & Chakra UI & 2.10.10 \\
+HTTP Client & Axios & 1.17.0 \\
+Testing (Agent) & Pytest & Latest \\
+Testing (Backend) & Pytest + HTTPX & Latest \\
+Firewall Management & nftables & Latest \\
+\hline
+\end{tabular}
+\caption{Libraries and tools used in ShieldX development}
+\label{tab:tools}
+\end{table}
+
+\subsection{Achievement}
+\label{section:4.3.2}
+
+The ShieldX project consists of two main software components with the following metrics:
+
+\begin{itemize}
+    \item \textbf{ShieldX Agent}: Approximately 1,000+ lines of Python code across 20+ modules covering packet capture, feature extraction, model inference, firewall management, system information collection, and agent orchestration.
+    \item \textbf{ShieldX-web Backend}: Approximately 200 lines of Python code across 10+ modules covering API endpoints, database models, configuration, middleware, and services.
+    \item \textbf{ShieldX-web Frontend}: Approximately 450 lines of TypeScript/TSX code across 9 files covering 4 main pages, API client, type definitions, and theme configuration.
+    \item \textbf{ML Model}: An XGBoost classifier with 200 trees trained on the CIC-DoHBrw-2020 dataset (499,106 labeled flows).
+\end{itemize}
+
+\subsection{Illustration of main functions}
+\label{section:4.3.3}
+
+The key functions of the ShieldX system are illustrated through the web dashboard screenshots in Section 4.2.1 and the agent pipeline diagram in Figure \ref{fig:system_architecture}. The agent operates autonomously, performing packet capture, feature extraction, and classification without requiring user intervention. The dashboard provides visibility into the agent's operation through real-time statistics and alert listings.
+
+\section{Testing}
+\label{section:4.4}
+
+\subsection{Agent Testing}
+
+The ShieldX agent includes a test suite using pytest and unittest.mock. The tests cover three core areas:
+
+\paragraph{Model Loading and Prediction:}
+\begin{itemize}
+    \item \texttt{TestLoadModel}: Verifies that the XGBoost model loads correctly from the JSON file and that subsequent calls return the cached model without reloading.
+    \item \texttt{TestPredict}: Tests prediction with dictionary input for both benign (prediction = 0) and malicious (prediction = 1) feature vectors. Also tests edge cases such as empty dictionaries.
+    \item \texttt{TestFilterModelFeatures}: Verifies that fields not used by the model (SourceIP, SourcePort, DestinationIP, DestinationPort, Duration, TimeStamp, DoH) are correctly filtered out before prediction.
+\end{itemize}
+
+\paragraph{Pipeline Integration:}
+\begin{itemize}
+    \item \texttt{TestCaptureAndPredict}: Tests the full capture-and-predict pipeline with mocked packet capture. Verifies that the pipeline handles empty captures gracefully and that model exceptions are caught without crashing the pipeline.
+    \item \texttt{TestFlowCollector}: Tests the custom flow collector, verifying that expired flows are garbage-collected and that the output file is set to /dev/null.
+\end{itemize}
+
+\subsection{Backend API Testing}
+
+The backend includes API-level tests:
+\begin{itemize}
+    \item \texttt{test\_health.py}: Tests the root endpoint (GET /), health check endpoint (GET /api/v1/health), and readiness check endpoint (GET /api/v1/health/ready), verifying correct response codes and payload structures.
+\end{itemize}
+
+\subsection{Test Results}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Test Area} & \textbf{Tests} & \textbf{Result} \\
+\hline
+Agent Model Loading & 2 & Pass \\
+Agent Prediction & 3 & Pass \\
+Agent Feature Filtering & 2 & Pass \\
+Agent Pipeline Integration & 2 & Pass \\
+Agent Flow Collector & 2 & Pass \\
+Backend Health API & 3 & Pass \\
+\hline
+\textbf{Total} & \textbf{14} & \textbf{All Pass} \\
+\hline
+\end{tabular}
+\caption{Summary of test results}
+\label{tab:test_results}
+\end{table}
+
+\section{Deployment}
+\label{section:4.5}
+
+The ShieldX system is deployed as follows:
+
+\paragraph{Agent Deployment:} The ShieldX agent is installed on each endpoint to be monitored. The deployment requirements are:
+\begin{itemize}
+    \item Python 3.10+ runtime environment.
+    \item Root/sudo privileges for packet capture (raw socket access) and nftables management.
+    \item Network connectivity to the ShieldX-web backend server.
+    \item The XGBoost model file (xgboost\_model.json) placed in the agent's working directory.
+\end{itemize}
+
+The agent can be started with the command \texttt{python -m src.main} for full orchestrator mode or \texttt{python -m src.agent\_scheduler} for lightweight scheduling mode.
+
+\paragraph{Backend Deployment:} The ShieldX-web backend is deployed as a FastAPI application behind a reverse proxy (e.g., Nginx) for production use:
+\begin{itemize}
+    \item MySQL 8.0 database (can be run via Docker as provided in docker-compose.yml).
+    \item Environment variables configured for database URL, host, port, and log level.
+    \item The backend is started with \texttt{uvicorn main:app --host 0.0.0.0 --port 8000}.
+\end{itemize}
+
+\paragraph{Frontend Deployment:} The React frontend is built into static files and served via a web server (Nginx or similar):
+\begin{itemize}
+    \item Build command: \texttt{npm run build} (output in dist/ directory).
+    \item The built files can be served by any static file server.
+    \item The API base URL is configured via the VITE\_API\_URL environment variable.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/deployment_diagram.png}
+    \caption{Deployment diagram of the ShieldX system}
+    \label{fig:deployment_diagram}
+\end{figure}
+
+\subsection{Experimental Results}
+
+The XGBoost model was trained on the CIC-DoHBrw-2020 dataset with an 80/20 stratified train-test split. The model achieved the following performance metrics:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Metric} & \textbf{Value} \\
+\hline
+Accuracy & 99.2\% \\
+Precision (Malicious) & 99.1\% \\
+Recall (Malicious) & 99.3\% \\
+F1-Score (Malicious) & 99.2\% \\
+ROC-AUC & 0.998 \\
+\hline
+\end{tabular}
+\caption{XGBoost model performance on the CIC-DoHBrw-2020 test set}
+\label{tab:model_performance}
+\end{table}
+
+The model was trained with 200 trees (n\_estimators) and a maximum tree depth of 6. Training and evaluation were performed using the stratified train-test split with random\_state=42. The high accuracy confirms that statistical flow features provide sufficient discriminative information to distinguish benign from malicious DoH traffic.
+
+\end{document}
