@@ -1,132 +1,175 @@
 \documentclass[../Main.tex]{subfiles}
 \begin{document}
 
-\section{General Regulations}
-Dưới đây là một số quy định và hướng dẫn viết đồ án tốt nghiệp mà bắt buộc sinh viên phải đọc kỹ và tuân thủ nghiêm ngặt.
+\section{Installation and Setup Guide}
 
-Sinh viên cần đảm bảo tính thống nhất toàn báo cáo (font chữ, căn dòng hai bên, hình ảnh, bảng, margin trang, đánh số trang, v.v.). Để làm được như vậy, sinh viên chỉ cần sử dụng các định dạng theo đúng template ĐATN này. Khi paste nội dung văn bản từ tài liệu khác của mình, sinh viên cần chọn kiểu Copy là “Text Only” để định dạng văn bản của template không bị phá vỡ/vi phạm.
+This appendix provides detailed instructions for installing, configuring, and operating the ShieldX system in a production environment.
 
-Tuyệt đối cấm sinh viên đạo văn. Sinh viên cần ghi rõ nguồn cho tất cả những gì không tự mình viết/vẽ lên, bao gồm các câu trích dẫn, các hình ảnh, bảng biểu, v.v. Khi bị phát hiện, sinh viên sẽ không được phép bảo vệ ĐATN.
+\subsection{Prerequisites}
 
-Tất cả các hình vẽ, bảng biểu, công thức, và tài liệu tham khảo trong ĐATN nhất thiết phải được SV giải thích và tham chiếu tới ít nhất một lần. Không chấp nhận các trường hợp sinh viên đưa ra hình ảnh, bảng biểu tùy hứng và không có lời mô tả/giải thích nào.
-
-Sinh viên tuyệt đối không trình bày ĐATN theo kiểu viết ý hoặc gạch đầu dòng. ĐATN không phải là một slide thuyết trình; khi người đọc không hiểu sẽ không có ai giải thích hộ. Sinh viên cần viết thành các đoạn văn và phân tích, diễn giải đầy đủ, rõ ràng. Câu văn cần đúng ngữ pháp, đầy đủ chủ ngữ, vị ngữ và các thành phần câu.
-Khi thực sự cần liệt kê, sinh viên nên liệt kê theo phong cách khoa học với các ký tự La Mã. Ví dụ, nhiều sinh viên luôn cảm thấy hối hận vì (i) chưa cố gắng hết mình, (ii) chưa sắp xếp thời gian học/chơi một cách hợp lý, (iii) chưa tìm được người yêu để chia sẻ quãng đời sinh viên vất vả, và (iv) viết ĐATN một cách cẩu thả.
-
-Trong một số trường hợp nhất thiết phải dùng các bullet để liệt kê, sinh viên cần thống nhất Style cho toàn bộ các bullet các cấp mà mình sử dụng đến trong báo cáo. Nếu dùng bullet cấp 1 là hình tròn đen, toàn bộ báo cáo cần thống nhất cách dùng như vậy; ví dụ như sau:
+Before deploying ShieldX, ensure the following prerequisites are met:
 
 \begin{itemize}
-\item Đây là mục 1 – Thực sự không còn cách nào khác tôi mới dùng đến việc bullet trong báo cáo.
-\item Đây là mục 2 – Nghĩ lại thì tôi có thể không cần dùng bullet cũng được. Nên tôi sẽ xóa bullet và tổ chức lại hai mục này trong báo cáo của mình cho khoa học hơn. Tôi muốn thầy cô và người đọc cảm nhận được tâm huyết của tôi trong từng trang báo cáo ĐATN.
+    \item \textbf{Agent (Linux)}: Ubuntu 20.04+ or any Linux distribution with Python 3.10+, root/sudo access for packet capture and nftables management, and network connectivity to the ShieldX-web backend.
+    \item \textbf{Backend (Linux/Windows)}: Python 3.10+, MySQL 8.0 database (can be Dockerized), and network access for agents to connect.
+    \item \textbf{Frontend}: Node.js 18+ and npm for building the React dashboard. The built static files can be served by any web server (Nginx, Apache, etc.).
 \end{itemize}
 
+\subsection{Agent Installation}
 
-\section{Majoring}
-Sinh viên lưu ý viết đúng ngành/chuyên ngành trên bìa và trên gáy theo đúng quy định của Trường. Ngành học hay chuyên ngành học phụ thuộc vào ngành học mà sinh viên đăng ký. Sinh viên có thể đăng nhập trên trang quản lý học tập của mình để xem lại chính xác ngành học của mình. 
+\subsubsection{Step 1: Clone the Repository}
 
-Một số ví dụ sinh viên có thể tham khảo dưới đây, trong trường hợp có chuyên ngành thì sinh viên không cần ghi chuyên ngành:
+\begin{verbatim}
+git clone <repository-url> ShieldX
+cd ShieldX
+\end{verbatim}
 
-\begin{outline}
- \1 Đối với kỹ sư chính quy:
-   \2 Từ K61 trở về trước: Ngành Kỹ thuật phần mềm
-   \2 Từ K62 trở về sau: Ngành Khoa học máy tính
- \1 Đối với cử nhân:
-   \2 Ngành Công nghệ thông tin
- \1 Đối với chương trình EliteTech:
-   \2 Chương trình Việt Nhật/KSTN: Ngành Công nghệ thông tin
-   \2 Chương trình ICT Global: Ngành Information Technology
-   \2 Chương trình DS\&AI: Ngành Khoa học dữ liệu
-\end{outline}
+\subsubsection{Step 2: Set Up Python Environment}
 
-\section{Bulleting and Numbering}
-Việc sử dụng danh sách trong LaTeX khá đơn giản và không yêu cầu sinh viên phải thêm bất kỳ gói bổ sung nào. LaTeX cung cấp hai môi trường liệt kê đó là:
+\begin{verbatim}
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+\end{verbatim}
+
+\subsubsection{Step 3: Configure the Agent}
+
+Copy the example configuration file and edit it with your backend details:
+
+\begin{verbatim}
+cp agent_config.yaml.example agent_config.yaml
+\end{verbatim}
+
+The configuration file supports the following parameters:
+
 \begin{itemize}
-\item Đánh dấu (bullet) là kiểu liệt kê không có thứ tự. Để sử dụng kiểu liệt kê đánh dấu, chúng ta khai báo như sau\\ 
-\verb$\begin{itemize}$\\
- \verb$\item$ Nội dung thứ nhất được viết ở đây.\\
-\verb$\item$ Nội dung thứ hai được viết ở đây.\\
- \verb$\item$ ...\\
-\verb$\end{itemize}$
-\item Đánh số (numering) là kiểu liệt kê có thứ tự. Để sử dụng kiểu liệt kê đánh số, chúng ta khai báo như sau\\
-\verb$\begin{enumerate}$\\
- \verb$\item$ Nội dung thứ nhất được viết ở đây.\\
-\verb$\item$ Nội dung thứ hai được viết ở đây.\\
- \verb$\item$ ...\\
-\verb$\end{enumerate}$
+    \item \texttt{backend\_url}: The URL of the ShieldX-web backend API (e.g., http://192.168.1.100:8000).
+    \item \texttt{agent\_id}: A unique identifier for this agent (auto-generated if not specified).
+    \item \texttt{interface}: The network interface to capture packets on (e.g., eth0).
+    \item \texttt{sniff\_duration}: Duration of each capture round in seconds (default: 120).
+    \item \texttt{log\_level}: Logging verbosity (DEBUG, INFO, WARNING, ERROR).
 \end{itemize}
-Chú ý các nội dung trình bày trong cả hai môi trường liệt kê theo sau lệnh \verb$\item$. Ngoài ra LaTeX còn cung cấp một số kiểu liệt kê khác, sinh viên có thể tham khảo tại \url{https://www.overleaf.com/learn/latex/Lists}
-\section{Table insertion}
-\begin{table}[h!]
-\centering
-\begin{tabular}{||c c c c||} 
- \hline
- Col1 & Col2 & Col2 & Col3 \\ [0.5ex] 
- \hline\hline
- 1 & 6 & 87837 & 787 \\ 
- 2 & 7 & 78 & 5415 \\
- 3 & 545 & 778 & 7507 \\
- 4 & 545 & 18744 & 7560 \\
- 5 & 88 & 788 & 6344 \\ [1ex] 
- \hline
-\end{tabular}
-\caption{Table to test captions and labels.}
-\label{table:1}
-\end{table}
-Bảng \ref{table:1} là ví dụ về cách tạo bảng. Tất cả các bảng biểu phải được đề cập đến trong phần nội dung và phải được phân tích và bình luận.  Chú ý: Tạo bảng trong Latex khá phức tạp và mất thời gian, vì vậy sinh viên có thể sử dụng các công cụ hỗ trợ tạo bảng (Ví dụ: \url{https://www.tablesgenerator.com/}).
-Sinh viên có thể tìm hiểu sâu hơn về cách chèn ảnh trong Latex tại link \url{https://www.overleaf.com/learn/latex/Tables}.
 
-\section{Figure Insertion}
-\begin{figure}
-\centering
-\includegraphics[width=0.75\linewidth]{Figure/IoT.png}
-\caption{Internet vạn vật}
-\label{fig:iot}
-\end{figure}
+\subsubsection{Step 4: Place the ML Model}
 
-Hình \ref{fig:iot} là ví dụ về cách chèn ảnh. Lưu ý chú thích của hình vẽ được đặt ngay dưới hình vẽ. Sinh viên có thể tìm hiểu sâu hơn về cách chèn ảnh trong Latex tại \url{https://www.overleaf.com/learn/latex/Inserting_Images}.
+Ensure the XGBoost model file is in the project root directory:
 
-Chú ý, tất cả các hình vẽ phải được đề cập đến trong phần nội dung và phải được phân tích và bình luận. 
+\begin{verbatim}
+cp xgboost_model.json ShieldX/
+\end{verbatim}
 
-\section{Reference}
-\paragraph{Listing}\mbox{}
+The agent expects the model file at the path specified in \texttt{src/domains/pipeline.py} (default: \texttt{xgboost\_model.json} in the current working directory).
 
-Áp dụng cách liệt kê theo quy định của IEEE. Ví dụ của việc trích dẫn như sau \cite{scott2013sdn}. Cụ thể, sinh viên sử dụng lệnh \verb!\cite{}! như sau \cite{ashton2009internet}. Chỉ những tài liệu được trích dẫn thì mới xuất hiện trong phần Tài liệu tham khảo. Tài liệu tham khảo cần có nguồn gốc rõ ràng và phải từ nguồn đáng tin cậy. Hạn chế trích dẫn tài liệu tham khảo từ các website, từ wikipedia.
-\paragraph{Types of Reference}\mbox{}
+\subsubsection{Step 5: Run the Agent}
 
-Các nguồn tài liệu tham khảo chính là sách, bài báo trong các tạp chí, bài báo trong các hội nghị khoa học và các tài liệu tham khảo khác trên internet.
+For full orchestrator mode (recommended):
 
-\section{Equations}
-Các gói amsmath, amssymb, amsfonts hỗ trợ viết phương trình/công thức toán học đã được bổ sung sẵn ở phần đầu của file main.tex. Một ví dụ về tạo phương trình \eqref{pt31} như sau 
-\begin{equation}\label{pt31}
-    F(x) = \int^a_b \frac{1}{3}x^3
-\end{equation}
-Phương trình \ref{pt31} là ví dụ về phương trình tích phân. Một phương trình khác không được đánh số thứ tự (gán nhãn)
-\begin{equation*}\label{pt32}
-    x[t_n] = \frac{1}{\sqrt{N}} \sum_{k=0}^{N-1}X[f_k]e^{j 2\pi n k/N}
-\end{equation*}
-Phương trình này thể hiện phép biến đổi Fourier rời rạc ngược (IDFT).
+\begin{verbatim}
+sudo python -m src.main
+\end{verbatim}
 
-\section{Qui cách đóng quyển}
-Phần bìa trước chế bản theo qui định; bìa trước và bìa sau là giấy liền khổ. Sử dụng keo nhiệt để dán gáy khi đóng quyển thay vì sử dụng băng dính và dập ghim như mô tả ở Figure~\ref{fig:Bia}
-\begin{figure}
-\centering
-\includegraphics[width=0.5\linewidth]{Figure/Bia.PNG}
-\caption{Qui cách đóng quyển đồ án}
-\label{fig:Bia}
-\end{figure} 
-Phần gáy ĐATN cần ghi các thông tin tóm tắt sau:
-Kỳ làm ĐATN - Ngành đào tạo - Họ và tên sinh viên - Mã số sinh viên. Ví dụ:
-\begin{quote}
-2022.1 - KỸ THUẬT MÁY TÍNH - NGUYỄN VĂN A - 20221234
-\end{quote}
-Qui cách ghi chữ phần gáy như hình dưới đây:
-\begin{figure}
-\centering
-\includegraphics[width=0.5\linewidth]{Figure/GayBia.PNG}
-\caption{Qui cách đóng quyển đồ án}
-\label{fig:Bia}
-\end{figure} 
+For lightweight scheduling mode (detection only, no firewall management):
 
+\begin{verbatim}
+sudo python -m src.agent_scheduler
+\end{verbatim}
 
+The agent requires root privileges for two operations: (i) raw socket access for packet capture via Scapy, and (ii) nftables rule management for domain whitelist enforcement.
+
+\subsection{Backend Installation}
+
+\subsubsection{Step 1: Set Up MySQL Database}
+
+Using Docker (recommended):
+
+\begin{verbatim}
+docker run --name shieldx-mysql -e MYSQL_ROOT_PASSWORD=root \
+  -e MYSQL_DATABASE=shieldx -p 3306:3306 -d mysql:8.0
+\end{verbatim}
+
+\subsubsection{Step 2: Configure and Start the Backend}
+
+\begin{verbatim}
+cd services
+cp .env.example .env
+# Edit .env with your MySQL connection details
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8000
+\end{verbatim}
+
+The backend will automatically create the required database tables on first startup using SQLModel's ORM.
+
+\subsection{Frontend Deployment}
+
+\subsubsection{Step 1: Install Dependencies and Build}
+
+\begin{verbatim}
+cd shieldx-web-frontend
+npm install
+echo "VITE_API_URL=http://localhost:8000" > .env
+npm run build
+\end{verbatim}
+
+\subsubsection{Step 2: Serve the Built Files}
+
+The built files in the \texttt{dist/} directory can be served by any static web server. Example Nginx configuration:
+
+\begin{verbatim}
+server {
+    listen 80;
+    server_name shieldx.example.com;
+    root /path/to/shieldx-web-frontend/dist;
+    index index.html;
+    location /api/ {
+        proxy_pass http://localhost:8000;
+    }
+}
+\end{verbatim}
+
+\subsection{Operation and Maintenance}
+
+\subsubsection{Agent Logging}
+
+The agent logs to both stdout and a rotating file (\texttt{agent.log}). The log format includes timestamps, log levels, and module names:
+
+\begin{verbatim}
+2026-06-22 10:30:00,123 - pipeline - INFO - Starting capture round...
+2026-06-22 10:32:00,456 - pipeline - INFO - Processed 15 flows
+2026-06-22 10:32:00,789 - pipeline - WARNING - Malicious flow detected: 192.168.1.50:443
+\end{verbatim}
+
+\subsubsection{Monitoring Agent Health}
+
+The agent sends heartbeat signals to the backend every 60 seconds. The heartbeat payload includes system information (hostname, IP address, OS version, CPU and memory usage) and the current agent status. Administrators can monitor agent health through the web dashboard's Agents page.
+
+\subsubsection{Updating the ML Model}
+
+To update the ML model without restarting the agent:
+
+\begin{enumerate}
+    \item Replace the \texttt{xgboost\_model.json} file with the new model.
+    \item The agent automatically detects the file modification on the next capture round.
+    \item If hot-reloading fails, restart the agent with \texttt{sudo python -m src.main}.
+\end{enumerate}
+
+\subsubsection{Troubleshooting Common Issues}
+
+\begin{itemize}
+    \item \textbf{"Permission denied" for packet capture}: Ensure the agent is run with root privileges or that the Python binary has CAP\_NET\_RAW capability: \texttt{sudo setcap cap\_net\_raw+ep \$(readlink -f \$(which python))}.
+    \item \textbf{Backend connection refused}: Verify that the backend server is running and that the \texttt{backend\_url} in \texttt{agent\_config.yaml} is correct. Check for firewall rules blocking port 8000.
+    \item \textbf{No flows detected}: Verify that the agent is monitoring the correct network interface and that there is actual TLSv1.3 traffic on port 443. Use \texttt{tcpdump -i eth0 port 443} to verify packet capture independently.
+    \item \textbf{Memory usage growing}: The flow garbage collection parameters in \texttt{flow\_session.py} may need tuning. Reduce \texttt{EXPIRED\_UPDATE} interval or increase the flow timeout threshold.
+    \item \textbf{Model loading fails}: Ensure the \texttt{xgboost\_model.json} file exists and is compatible with the installed XGBoost version. Re-download the model if it appears corrupted.
+\end{itemize}
+
+\subsection{Security Considerations for Production}
+
+\begin{itemize}
+    \item \textbf{HTTPS}: Configure TLS termination on the reverse proxy (Nginx) for the backend API to encrypt agent-backend communication.
+    \item \textbf{Authentication}: Add JWT-based authentication to the backend API to prevent unauthorized access. The current implementation does not include authentication.
+    \item \textbf{Database Credentials}: Use environment variables or a secrets manager for MySQL credentials rather than hardcoding them in configuration files.
+    \item \textbf{Agent Isolation}: Run each agent in a dedicated system user account with minimal privileges. Use Linux namespaces or containers for additional isolation.
+    \item \textbf{Log Retention}: Configure log rotation to prevent disk exhaustion. The default configuration keeps 30 days of logs before rotation.
+\end{itemize}
 
 \end{document}

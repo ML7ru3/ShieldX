@@ -7,18 +7,32 @@ This thesis presented the design, implementation, and evaluation of ShieldX, an 
 
 The research began with a comprehensive survey of the problem domain, identifying the security challenges introduced by DNS-over-HTTPS and the limitations of existing solutions. Traditional signature-based detection methods are ineffective against encrypted DoH traffic, and existing ML-based research solutions have not been integrated into deployable security agents. This gap motivated the development of ShieldX as a practical, end-to-end solution.
 
-The theoretical background covered the essential concepts underlying the system: DNS-over-HTTPS protocol mechanics, statistical network flow analysis, and the XGBoost machine learning algorithm. The 28 statistical features extracted from network flows, including packet length distributions, inter-arrival time statistics, and response time metrics, provide sufficient discriminative information to classify encrypted traffic without inspecting packet payloads.
+The theoretical background covered the essential concepts underlying the system: DNS-over-HTTPS protocol mechanics, statistical network flow analysis, and four machine learning algorithms (XGBoost, Random Forest, LightGBM, and SVM). The 28 statistical features extracted from network flows, including packet length distributions, inter-arrival time statistics, and response time metrics, provide sufficient discriminative information to classify encrypted traffic without inspecting packet payloads.
 
 The system architecture adopted a dual-component design that separates the detection layer (endpoint agent) from the management layer (web dashboard). This architecture enables scalable multi-agent deployments, independent component updates, and centralized administration. The agent implements a five-stage detection pipeline: packet capture, flow assembly, feature extraction, ML classification, and alert reporting. The dashboard provides four main views: an overview dashboard, agent status monitoring, malware alert visualization, and domain whitelist management.
 
-The XGBoost model, trained on the CIC-DoHBrw-2020 dataset with 499,106 labeled flows, achieved 99.2\% accuracy in distinguishing benign from malicious DoH traffic. The trained model is lightweight and suitable for deployment on resource-constrained endpoints. The nftables-based firewall enforcement mechanism provides proactive network access control by dynamically applying domain whitelists at the kernel level.
+A comprehensive model comparison was conducted, evaluating Random Forest, LightGBM, XGBoost, and SVM on the CIC-DoHBrw-2020 dataset. The tree-based ensemble models (Random Forest: 99.99\%, LightGBM: 99.99\%, XGBoost: 100.00\% accuracy) dramatically outperformed SVM (73.95\% accuracy). XGBoost was selected as the production model due to its best overall accuracy, fastest inference time (2.9 microseconds per sample), and compact model size (328 KB). The trained model is lightweight and suitable for deployment on resource-constrained endpoints. The nftables-based firewall enforcement mechanism provides proactive network access control by dynamically applying domain whitelists at the kernel level.
 
 The main achievements of this thesis are:
 \begin{itemize}
-    \item A complete, deployable pipeline for real-time DoH malware detection using statistical flow analysis and XGBoost classification, bridging the gap between academic ML research and operational security.
+    \item A complete, deployable pipeline for real-time DoH malware detection using statistical flow analysis and machine learning classification, bridging the gap between academic ML research and operational security.
+    \item A comprehensive comparison of four machine learning models (Random Forest, LightGBM, XGBoost, SVM) on the CIC-DoHBrw-2020 dataset, demonstrating that tree-based ensemble methods achieve near-perfect classification accuracy for DoH traffic analysis.
     \item A dual-component architecture (agent + dashboard) that separates detection from management, enabling scalable and maintainable security deployments.
     \item An nftables-based domain whitelist enforcement mechanism that integrates with the ML detection pipeline to provide both reactive detection and proactive prevention.
     \item A responsive web dashboard providing centralized visibility into agent status, security alerts, and whitelist configuration.
+\end{itemize}
+
+\section{Limitations}
+
+Despite the achievements, several limitations of the current ShieldX system should be acknowledged:
+
+\begin{itemize}
+    \item \textbf{Linux-only agent}: The packet capture and nftables integration are currently specific to Linux. Windows and macOS endpoints cannot be monitored with the current agent implementation.
+    \item \textbf{Single dataset evaluation}: The model was trained and evaluated exclusively on the CIC-DoHBrw-2020 dataset. Generalization to DoH traffic from different network environments or time periods has not been validated.
+    \item \textbf{No authentication}: The current backend API lacks authentication, making it unsuitable for production deployment without additional security measures.
+    \item \textbf{Offline training only}: The ML model is trained offline and deployed as a static artifact. There is no mechanism for continuous learning or model updating based on new traffic patterns.
+    \item \textbf{Limited alert integration}: While the agent logs malicious detections locally, the integration with the backend API for real-time alert visualization is not fully implemented in the current version.
+    \item \textbf{No encryption for agent-backend communication}: Communication between agents and the backend uses plain HTTP, which could be intercepted by network attackers.
 \end{itemize}
 
 \section{Future Work}
@@ -27,28 +41,34 @@ While ShieldX achieves its core objectives, several directions for future improv
 
 \subsection{Short-term Improvements}
 
-\paragraph{Backend Authentication and Authorization:} The current API does not implement authentication. Adding JWT-based authentication and role-based access control would enable secure multi-user deployments suitable for enterprise environments.
+\paragraph{Backend Authentication and Authorization:} The current API does not implement authentication. Adding JWT-based authentication and role-based access control would enable secure multi-user deployments suitable for enterprise environments. Integration with OAuth 2.0 providers such as Keycloak or Auth0 would provide enterprise-grade identity management.
 
-\paragraph{API Alert Integration:} The agent currently logs malicious detections but does not send alerts to the backend API in the current implementation. Completing this integration would enable real-time alert visualization on the dashboard.
+\paragraph{API Alert Integration:} The agent currently logs malicious detections but does not send alerts to the backend API in the current implementation. Completing this integration would enable real-time alert visualization on the dashboard, with support for push notifications and email alerts for critical detections.
 
-\paragraph{Windows Support:} The agent's packet capture and nftables integration are currently Linux-specific. Porting the agent to Windows would require adapting the packet capture layer (using Npcap/WinPcap) and replacing nftables with Windows Filtering Platform (WFP) rules.
+\paragraph{Windows Support:} Porting the agent to Windows would require adapting the packet capture layer (using Npcap/WinPcap) and replacing nftables with Windows Filtering Platform (WFP) rules. The cross-platform ML model (XGBoost JSON format) would work without modification, as XGBoost is available on all major platforms.
 
-\paragraph{Performance Optimization:} The flow expiration and garbage collection parameters can be tuned to reduce memory usage on high-traffic endpoints. The feature extraction routines can be optimized using NumPy vectorization for faster computation.
+\paragraph{Performance Optimization:} The flow expiration and garbage collection parameters can be tuned to reduce memory usage on high-traffic endpoints. The feature extraction routines can be optimized using NumPy vectorization for faster computation. Profiling the agent on production traffic would identify the most significant performance bottlenecks.
+
+\paragraph{HTTPS for Agent-Backend Communication:} Implementing TLS encryption for agent-backend communication would prevent man-in-the-middle attacks and ensure the confidentiality and integrity of alert data in transit.
 
 \subsection{Medium-term Extensions}
 
-\paragraph{Alternative ML Models:} While XGBoost achieves high accuracy, exploring deep learning architectures such as CNNs and LSTMs for time-series flow analysis may yield further improvements. The modular pipeline design facilitates model substitution.
+\paragraph{Alternative ML Models:} While XGBoost achieves exceptional accuracy, exploring deep learning architectures such as CNNs and LSTMs for time-series flow analysis may yield further improvements, particularly for detecting novel attack patterns. The modular pipeline design facilitates model substitution without requiring changes to the packet capture or feature extraction stages.
 
-\paragraph{Feature Importance Analysis:} The XGBoost model provides feature importance scores that can be analyzed to identify the most discriminative statistical features. This analysis could lead to a reduced feature set that reduces computational overhead while maintaining accuracy.
+\paragraph{Feature Importance Analysis:} The XGBoost model provides feature importance scores that can be analyzed to identify the most discriminative statistical features. This analysis could lead to a reduced feature set that reduces computational overhead while maintaining accuracy, enabling deployment on lower-end hardware such as IoT devices or embedded systems.
 
-\paragraph{Multi-platform Dashboard:} The React frontend could be extended with additional features such as alert filtering, timeline visualization, agent grouping, and export functionality for compliance reporting.
+\paragraph{Multi-platform Dashboard:} The React frontend could be extended with additional features such as alert filtering by severity and time range, interactive timeline visualization of detection events, agent grouping by organizational unit, and export functionality for compliance reporting in PDF and CSV formats.
+
+\paragraph{Cross-dataset Validation:} Evaluating the ShieldX models on additional DoH traffic datasets (such as CIRA-CIC-DoHBrw-2020 variant or custom-collected traffic) would provide stronger evidence of generalization. This is essential for building confidence in production deployment.
 
 \subsection{Long-term Vision}
 
-\paragraph{Federated Learning:} Deploying multiple agents with local model updates and centralized aggregation through federated learning would enable privacy-preserving collaborative model improvement across organizations.
+\paragraph{Federated Learning:} Deploying multiple agents with local model updates and centralized aggregation through federated learning would enable privacy-preserving collaborative model improvement across organizations. Each organization's traffic data would remain local while contributing to a globally improved detection model.
 
-\paragraph{Automated Response:} Beyond detection and alerting, the system could be extended with automated incident response capabilities, such as isolating compromised endpoints or dynamically updating firewall rules in response to detected threats.
+\paragraph{Automated Response:} Beyond detection and alerting, the system could be extended with automated incident response capabilities, such as isolating compromised endpoints from the network, terminating malicious processes, dynamically updating firewall rules in response to detected threats, and triggering SIEM playbooks.
 
-\paragraph{SIEM Integration:} Standardized alert formats (e.g., STIX/TAXII) and integration with popular SIEM platforms would enable ShieldX to operate as part of a broader security operations center (SOC) infrastructure.
+\paragraph{SIEM Integration:} Standardized alert formats (e.g., STIX/TAXII) and integration with popular SIEM platforms (Splunk, ELK Stack, IBM QRadar) would enable ShieldX to operate as part of a broader security operations center (SOC) infrastructure, providing automated ticket creation and incident correlation.
+
+\paragraph{Real-time Model Updates:} Implementing a model update mechanism would allow the backend to push updated model weights to agents without requiring agent restart. This would enable rapid response to emerging threat patterns and support continuous model improvement through feedback loops.
 
 \end{document}

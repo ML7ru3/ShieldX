@@ -78,6 +78,21 @@ Security administrators can manage a list of trusted domains through the dashboa
 
 The core business process of the ShieldX system is the detection and response pipeline. The process begins with the agent capturing packets from the network interface. Packets are grouped into bidirectional flows, and 28 statistical features are extracted for each flow. The XGBoost model classifies the flow as benign or malicious. If malicious, an alert is sent to the backend, and the administrator can review the alert and take appropriate action, such as updating the whitelist or investigating the affected endpoint.
 
+The complete business process can be described through the following sequence of activities:
+
+\begin{enumerate}
+    \item \textbf{Agent Initialization}: The ShieldX agent starts and performs self-configuration, loading the XGBoost model file, initializing the packet capture interface, and registering with the backend via a heartbeat request.
+    \item \textbf{Network Monitoring}: The agent begins capturing packets on the configured network interface, filtering for TCP traffic on port 443 (HTTPS). Captured packets are buffered and grouped into bidirectional flows based on the standard 5-tuple.
+    \item \textbf{Flow Completion}: Flows are marked as complete when either (a) no packets have been observed for 40 seconds, or (b) the flow has existed for more than 120 seconds. Completed flows are passed to the feature extraction stage.
+    \item \textbf{Feature Extraction}: For each completed flow, a Python module computes 28 statistical features covering bytes-level metrics, packet length distribution statistics, packet timing patterns, and response time analysis.
+    \item \textbf{ML Classification}: The feature vector is passed to the XGBoost classifier, which produces a binary prediction: benign (0) or malicious (1). The prediction probability is also recorded for confidence assessment.
+    \item \textbf{Aletting and Logging}: If the prediction is malicious, the agent logs the flow details locally and sends an alert to the ShieldX-web backend via a REST API call. The backend stores the alert in the database for later review.
+    \item \textbf{Administrator Review}: The security administrator accesses the ShieldX-web dashboard to review alerts, examine flow details, and make decisions about whitelist updates or further investigation.
+    \item \textbf{Whitelist Synchronization}: On the next heartbeat cycle, the agent retrieves the updated whitelist from the backend and reconfigures the nftables firewall rules to enforce the new domain access policy.
+\end{enumerate}
+
+This process runs continuously, with the detection cycle repeating every 120 seconds and the heartbeat cycle every 60 seconds. The system is designed to operate autonomously, requiring administrator intervention only when malicious traffic is detected.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{Figure/Chapter2/activity_detection_pipeline.png}
@@ -142,8 +157,112 @@ The core business process of the ShieldX system is the detection and response pi
     \item \textbf{Postcondition}: The whitelist is updated, and the change is propagated to agents on their next heartbeat.
 \end{itemize}
 
-\section{Non-functional requirement}
+\subsection{Description of use case ``Agent Status Monitoring''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: Agent Status Monitoring
+    \item \textbf{Primary actor}: Security Administrator
+    \item \textbf{Precondition}: The administrator is logged into the ShieldX-web dashboard and at least one agent has registered with the backend.
+    \item \textbf{Flow of events}:
+        \begin{enumerate}
+            \item The administrator navigates to the Agents page on the dashboard.
+            \item The frontend sends a GET request to /api/v1/agents/ to retrieve all registered agents.
+            \item The backend queries the database for all agent records and returns them as a JSON array.
+            \item The dashboard renders an interactive table showing agent ID, hostname, IP address, status (active/offline), last seen timestamp, and uptime.
+            \item Agents with a last\_seen timestamp older than 120 seconds are displayed with a red ``offline'' indicator.
+            \item The table updates automatically every 30 seconds via a polling mechanism.
+        \end{enumerate}
+    \item \textbf{Alternative flow}: If no agents are registered, the dashboard displays an empty state with instructions for deploying the agent.
+    \item \textbf{Postcondition}: The administrator has real-time visibility into all deployed agents and their operational status.
+\end{itemize}
+
+\subsection{Description of use case ``System Health Dashboard''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: System Health Dashboard
+    \item \textbf{Primary actor}: Security Administrator
+    \item \textbf{Precondition}: The administrator is logged into the ShieldX-web dashboard.
+    \item \textbf{Flow of events}:
+        \begin{enumerate}
+            \item The administrator navigates to the Dashboard page.
+            \item The frontend sends parallel GET requests to multiple API endpoints to collect statistics: total agent count, active agent count, total alerts, alerts in the last 24 hours, and whitelist domain count.
+            \item The backend aggregates and returns the statistics as a single response payload.
+            \item The dashboard renders summary cards with count metrics, each with an icon and color-coded background.
+            \item The administrator can click on each card to navigate to the corresponding detail page.
+        \end{enumerate}
+    \item \textbf{Postcondition}: The administrator has an at-a-glance overview of the entire ShieldX deployment's health and security posture.
+\end{itemize}
+
+\subsection{Description of use case ``Flow Detail Inspection''}
+
+\begin{itemize}
+    \item \textbf{Use case name}: Flow Detail Inspection
+    \item \textbf{Primary actor}: Security Administrator
+    \item \textbf{Precondition}: At least one malware alert has been reported to the backend by an agent.
+    \item \textbf{Flow of events}:
+        \begin{enumerate}
+            \item The administrator navigates to the Malware Alerts page on the dashboard.
+            \item The frontend sends a GET request to /api/v1/alerts/ with optional query parameters for filtering (date range, agent ID, malware type).
+            \item The backend queries the MalwareAlert table with the applied filters and returns paginated results.
+            \item The dashboard renders an interactive table with columns for timestamp, agent hostname, malware type, flow source/destination IPs, and confidence score.
+            \item The administrator clicks on a specific alert row to expand its details, revealing the full 28-feature vector and packet-level metadata.
+            \item The administrator can export the alert details as a JSON file for further analysis or integration with external SIEM tools.
+        \end{enumerate}
+    \item \textbf{Alternative flow}: If no alerts match the applied filters, an empty state message is displayed.
+    \item \textbf{Postcondition}: The administrator has inspected the details of a specific malicious flow and can make informed decisions about further action.
+\end{itemize}
+
+\section{Hands-on Implementation Considerations}
 \label{section:2.4}
+
+Beyond the functional and non-functional requirements, several practical considerations inform the implementation of the ShieldX system:
+
+\subsection{Packet Capture Requirements}
+
+Real-time packet capture on endpoint devices requires careful consideration of operating system permissions and network interface characteristics:
+
+\begin{itemize}
+    \item \textbf{Root/Sudo Privileges}: Raw socket access for packet capture requires elevated privileges. The agent must be run as root or with CAP\_NET\_RAW capability on Linux.
+    \item \textbf{Network Interface Selection}: The agent must allow configuration of the target network interface. On multi-homed systems, traffic may need to be monitored on multiple interfaces.
+    \item \textbf{Packet Filtering Efficiency}: To reduce processing overhead, the agent uses BPF (Berkeley Packet Filter) expressions to capture only TCP traffic on port 443, discarding irrelevant packets at the kernel level before they reach the agent.
+    \item \textbf{Buffer Management}: High-traffic environments may generate thousands of packets per second. The agent must implement efficient buffer management to avoid packet drops while maintaining classification throughput.
+\end{itemize}
+
+\subsection{ML Model Deployment Strategy}
+
+Deploying a trained machine learning model on endpoint devices presents unique challenges:
+
+\begin{itemize}
+    \item \textbf{Model Portability}: The trained model must be serialized in a format that can be loaded on any endpoint regardless of the training environment. XGBoost's JSON format provides this portability.
+    \item \textbf{Version Management}: As models are updated and improved, the agent must support model versioning and hot-swapping without requiring a full application restart.
+    \item \textbf{Inference Latency}: The classification step must complete within milliseconds to avoid becoming a bottleneck in the detection pipeline. This requires efficient model evaluation optimized for the target hardware.
+    \item \textbf{Memory Footprint}: The model must fit within the available memory of the endpoint device. Trees ensemble models can be compressed through pruning or quantization when necessary.
+\end{itemize}
+
+\subsection{Agent-Backend Communication Reliability}
+
+The agent operates independently but relies on the backend for centralized management:
+
+\begin{itemize}
+    \item \textbf{Offline Resilience}: The agent must continue detection and local logging even when the backend is unreachable. Alerts should be queued locally and transmitted when connectivity is restored.
+    \item \textbf{Heartbeat Mechanism}: Regular heartbeat signals indicate agent liveness. If no heartbeat is received within a configurable timeout, the backend should mark the agent as offline.
+    \item \textbf{Idempotent Operations}: API operations should be designed to be idempotent, allowing the agent to retry failed requests without creating duplicate records.
+    \item \textbf{Backpressure Handling}: If the backend is overwhelmed, it should signal the agent to reduce the alert frequency rather than dropping alerts.
+\end{itemize}
+
+\subsection{Security and Compliance}
+
+The ShieldX system processes potentially sensitive network traffic data:
+
+\begin{itemize}
+    \item \textbf{Data Privacy}: The agent extracts only statistical features from network flows, not packet payloads. Statistical features cannot be reverse-engineered to recover original DNS queries, preserving user privacy.
+    \item \textbf{Least Privilege}: The agent operates with the minimum necessary privileges: raw socket access for packet capture and root access for nftables management. The backend requires only database write access for alerts and read access for the whitelist.
+    \item \textbf{Audit Trail}: All detection events are logged with timestamps and agent identification, providing a complete audit trail for security investigations.
+    \item \textbf{Log Rotation}: The agent implements log rotation to prevent disk exhaustion during prolonged operation. Old log files are compressed and archived according to configurable retention policies.
+\end{itemize}
+
+\section{Non-functional requirement}
+\label{section:2.5}
 
 The following non-functional requirements guide the design and implementation of the ShieldX system:
 

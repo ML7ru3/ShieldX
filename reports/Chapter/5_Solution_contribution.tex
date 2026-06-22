@@ -14,18 +14,29 @@ Existing research on DoH-based malware detection has focused primarily on offlin
 The ShieldX agent implements an end-to-end detection pipeline that bridges this gap. The pipeline integrates five stages into a single executable process:
 
 \begin{itemize}
-    \item \textbf{Packet Capture}: Using Scapy's AsyncSniffer, the agent captures live TLSv1.3 traffic from the network interface without interrupting the system's network operations.
-    \item \textbf{Flow Assembly}: Captured packets are grouped into bidirectional flows using a custom FlowSession implementation with configurable expiration and garbage collection parameters.
-    \item \textbf{Feature Extraction}: For each completed flow, 28 statistical features are computed using optimized Python classes that calculate bytes-level, packet length, packet time, and response time statistics.
-    \item \textbf{ML Classification}: Features are passed to a pre-trained XGBoost model that classifies the flow as benign or malicious in under 100 milliseconds.
-    \item \textbf{Alert Reporting}: Malicious detections are logged locally and reported to the central backend via HTTP for centralized visibility.
+    \item \textbf{Packet Capture}: Using Scapy's AsyncSniffer, the agent captures live TLSv1.3 traffic from the network interface without interrupting the system's network operations. The sniffer runs in a background thread and passes captured packets to the FlowCollector for processing. The capture is filtered to TCP traffic on port 443 (HTTPS), which is where DoH traffic operates.
+    \item \textbf{Flow Assembly}: Captured packets are grouped into bidirectional flows using a custom FlowSession implementation with configurable expiration and garbage collection parameters. A flow is identified by the 5-tuple (Source IP, Source Port, Destination IP, Destination Port, Protocol). Each flow has a configurable idle timeout (default 40 seconds) and a maximum duration (default 120 seconds) after which it is considered complete.
+    \item \textbf{Feature Extraction}: For each completed flow, 28 statistical features are computed using optimized Python classes organized into four groups: \texttt{FlowBytes} (bytes-level metrics), \texttt{PacketLength} (distribution statistics), \texttt{PacketTime} (timing patterns), and \texttt{ResponseTime} (server response behavior). Each class computes eight statistical measures: variance, standard deviation, mean, median, mode, skewness from median, skewness from mode, and coefficient of variation.
+    \item \textbf{ML Classification}: Features are passed to a pre-trained XGBoost model that classifies the flow as benign or malicious in under 100 milliseconds. The model is loaded lazily on first use and cached for subsequent predictions. Features not used by the model (such as IP addresses, ports, and timestamps) are automatically filtered out before inference.
+    \item \textbf{Alert Reporting}: Malicious detections are logged locally and reported to the central backend via HTTP for centralized visibility. The agent sends a POST request to the \texttt{/report-malware/} endpoint with agent identification, malware type, and the complete flow details including the 28 extracted features.
 \end{itemize}
 
-The pipeline is designed for continuous operation. The agent runs in a loop, periodically capturing packets (configurable duration, default 120 seconds), processing accumulated flows, sending alerts, and optionally sleeping to reduce resource consumption. The APScheduler library manages the scheduling of capture rounds and heartbeat signals.
+\subsection{Implementation Details}
+
+The detection pipeline is implemented in the \texttt{src/domains/pipeline.py} module. The core function, \texttt{capture\_and\_predict()}, orchestrates the entire pipeline:
+
+\begin{enumerate}
+    \item \textbf{Sniffing}: The function calls \texttt{sniff(prn=handler, store=False, timeout=120)} from Scapy, which captures packets for 120 seconds. Each packet is passed to a handler function that feeds it to the \texttt{FlowCollector}.
+    \item \textbf{Flow Processing}: After the sniffing period, all active flows are retrieved from the \texttt{FlowCollector}. Each flow's \texttt{get\_data()} method is called to compute the 28 features. Flows with insufficient packets (fewer than 2 packets in either direction) are filtered out.
+    \item \textbf{Feature Filtering}: Metadata fields (\texttt{SourceIP}, \texttt{SourcePort}, \texttt{DestinationIP}, \texttt{DestinationPort}, \texttt{Duration}, \texttt{TimeStamp}, \texttt{DoH}) are removed, leaving only the 28 numerical features in the correct order expected by the model.
+    \item \textbf{Prediction}: The filtered feature vector is passed to \texttt{model.predict()}, which returns 0 for benign and 1 for malicious traffic. The prediction result is logged along with the flow summary.
+\end{enumerate}
+
+The pipeline uses multi-threading to maintain responsiveness. The capture thread runs the Scapy sniffer while the main thread manages scheduling and alert dispatch. The \texttt{APScheduler} library is configured with two jobs: (i) \texttt{capture\_and\_predict} running every 120 seconds, and (ii) \texttt{send\_heartbeat} running every 60 seconds to maintain agent registration with the backend.
 
 \subsection{Result}
 
-The integrated pipeline successfully demonstrates real-time DoH malware detection on endpoint devices. The XGBoost model achieves 99.2\% accuracy on the CIC-DoHBrw-2020 test set, with a prediction latency of under 100 milliseconds per flow. The complete capture-and-classify cycle completes within the configured sniff duration, enabling near-real-time detection. The pipeline is designed to be extensible: alternative ML models (Random Forest, SVM, LightGBM) have also been implemented and can be substituted with minimal code changes.
+The integrated pipeline successfully demonstrates real-time DoH malware detection on endpoint devices. The XGBoost model achieves 100.00\% accuracy on the CIC-DoHBrw-2020 test set, with a prediction latency of under 100 milliseconds per flow. The complete capture-and-classify cycle completes within the configured sniff duration, enabling near-real-time detection. The pipeline is designed to be extensible: alternative ML models (Random Forest, SVM, LightGBM) have also been implemented and can be substituted with minimal code changes, allowing future upgrades as better models become available.
 
 \section{Dual-Component Agent-Dashboard Architecture}
 
@@ -51,8 +62,8 @@ The communication between the two components follows a simple RESTful HTTP proto
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.80\textwidth]{Figure/Chapter5/agent_dashboard_communication.png}
-    \caption{Communication flow between agents and the dashboard}
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter5/agent_dashboard_communication.png}
+    \caption{Detailed communication flow between ShieldX Agent, Backend API, Database, and Frontend Dashboard, covering registration, heartbeat, whitelist sync, malware alerting, and admin operations}
     \label{fig:agent_dashboard_comm}
 \end{figure}
 

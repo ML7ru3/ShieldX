@@ -34,17 +34,148 @@ Network flow analysis involves the examination of metadata extracted from sequen
 
 \subsection{Network Flow Features}
 
-The ShieldX system extracts 28 statistical features from each bidirectional TCP flow. These features are grouped into four categories:
+The ShieldX system extracts 28 statistical features from each bidirectional TCP flow. These features are grouped into four categories of eight measures each, except for the bytes-level category which has four measures. The following subsections present the mathematical formulation of each feature.
 
-\paragraph{Bytes-level features (4 features):} FlowBytesSent, FlowSentRate, FlowBytesReceived, FlowReceivedRate. These measure the volume and rate of data transmitted in each direction.
+\paragraph{Notation:} For a given flow, let $\{p_1, p_2, \ldots, p_n\}$ be the sequence of packets in the flow. Each packet $p_i$ has a payload length $l_i$, a timestamp $t_i$, and a direction $d_i \in \{\text{FORWARD}, \text{REVERSE}\}$. Let $n_f$ be the number of forward packets and $n_r$ the number of reverse packets.
 
-\paragraph{Packet length features (8 features):} These describe the distribution of packet payload lengths within a flow. The computed statistics include variance, standard deviation, mean, median, mode, skewness from median, skewness from mode, and coefficient of variation. Malicious traffic often exhibits different packet length distributions compared to benign traffic due to the nature of C2 communication and data exfiltration.
+\subsubsection{Bytes-Level Features (4 features)}
 
-\paragraph{Packet time features (8 features):} These describe the distribution of inter-arrival times between consecutive packets. The same eight statistical measures are computed. Timing patterns can reveal automated communication behavior characteristic of malware.
+These features measure the volume and rate of data transmission in each direction:
 
-\paragraph{Response time features (8 features):} These describe the time differences between consecutive forward-reverse packet pairs, capturing server responsiveness patterns.
+\begin{equation}
+\text{FlowBytesSent} = \sum_{i: d_i = \text{FORWARD}} l_i
+\end{equation}
+\begin{equation}
+\text{FlowSentRate} = \frac{\text{FlowBytesSent}}{\max(t_n - t_1, \epsilon)}
+\end{equation}
+\begin{equation}
+\text{FlowBytesReceived} = \sum_{i: d_i = \text{REVERSE}} l_i
+\end{equation}
+\begin{equation}
+\text{FlowReceivedRate} = \frac{\text{FlowBytesReceived}}{\max(t_n - t_1, \epsilon)}
+\end{equation}
 
-The selection of these 28 features is based on the CIC-DoHBrw-2020 dataset \cite{montazeri2020doh} and prior research demonstrating their effectiveness for encrypted traffic classification.
+where $\epsilon$ is a small positive constant to prevent division by zero. These features capture the asymmetry between upstream and downstream traffic, which is often characteristic of malware C2 communication where small queries generate large responses or vice versa.
+
+\subsubsection{Packet Length Features (8 features)}
+
+Let $\{l_1, l_2, \ldots, l_n\}$ be the sequence of packet payload lengths in the flow. The following eight statistical measures are computed:
+
+\begin{equation}
+\mu_l = \frac{1}{n} \sum_{i=1}^{n} l_i \quad \text{(Mean)}
+\end{equation}
+\begin{equation}
+\sigma_l^2 = \frac{1}{n} \sum_{i=1}^{n} (l_i - \mu_l)^2 \quad \text{(Variance)}
+\end{equation}
+\begin{equation}
+\sigma_l = \sqrt{\sigma_l^2} \quad \text{(Standard Deviation)}
+\end{equation}
+\begin{equation}
+\tilde{l} = \text{median of } \{l_1, l_2, \ldots, l_n\} \quad \text{(Median)}
+\end{equation}
+\begin{equation}
+\hat{l} = \text{mode of } \{l_1, l_2, \ldots, l_n\} \quad \text{(Mode)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\text{median}} = \frac{3(\mu_l - \tilde{l})}{\sigma_l} \quad \text{(Skewness from Median)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\text{mode}} = \frac{\mu_l - \hat{l}}{\sigma_l} \quad \text{(Skewness from Mode)}
+\end{equation}
+\begin{equation}
+\text{CV}_l = \frac{\sigma_l}{\mu_l} \quad \text{(Coefficient of Variation)}
+\end{equation}
+
+Malicious traffic typically exhibits different packet length distributions compared to benign traffic. C2 communication often uses small, regular heartbeat packets, while data exfiltration involves large, irregular packet bursts. The skewness measures capture the asymmetry of the distribution, which tends to differ between human-generated and automated traffic.
+
+\subsubsection{Packet Time Features (8 features)}
+
+Let $\{\Delta t_1, \Delta t_2, \ldots, \Delta t_{n-1}\}$ be the sequence of inter-arrival times between consecutive packets, where $\Delta t_i = t_{i+1} - t_i$. The same eight statistical measures are computed:
+
+\begin{equation}
+\mu_{\Delta t} = \frac{1}{n-1} \sum_{i=1}^{n-1} \Delta t_i \quad \text{(Mean)}
+\end{equation}
+\begin{equation}
+\sigma_{\Delta t}^2 = \frac{1}{n-1} \sum_{i=1}^{n-1} (\Delta t_i - \mu_{\Delta t})^2 \quad \text{(Variance)}
+\end{equation}
+\begin{equation}
+\sigma_{\Delta t} = \sqrt{\sigma_{\Delta t}^2} \quad \text{(Standard Deviation)}
+\end{equation}
+\begin{equation}
+\widetilde{\Delta t} = \text{median of } \{\Delta t_1, \ldots, \Delta t_{n-1}\} \quad \text{(Median)}
+\end{equation}
+\begin{equation}
+\widehat{\Delta t} = \text{mode of } \{\Delta t_1, \ldots, \Delta t_{n-1}\} \quad \text{(Mode)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\Delta t}^{\text{median}} = \frac{3(\mu_{\Delta t} - \widetilde{\Delta t})}{\sigma_{\Delta t}} \quad \text{(Skewness from Median)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\Delta t}^{\text{mode}} = \frac{\mu_{\Delta t} - \widehat{\Delta t}}{\sigma_{\Delta t}} \quad \text{(Skewness from Mode)}
+\end{equation}
+\begin{equation}
+\text{CV}_{\Delta t} = \frac{\sigma_{\Delta t}}{\mu_{\Delta t}} \quad \text{(Coefficient of Variation)}
+\end{equation}
+
+Timing patterns are particularly informative for distinguishing automated malware traffic from human-generated benign traffic. Malware C2 communication often follows regular, periodic patterns with low variance, while human web browsing produces bursty, irregular inter-arrival times.
+
+\subsubsection{Response Time Features (8 features)}
+
+Response time features capture the timing between forward-reverse packet pairs. For each forward packet $p_i^f$, let $p_j^r$ be the next reverse packet that arrives after $p_i^f$. The response time is defined as $\Delta r_i = t_j^r - t_i^f$. Let $\{\Delta r_1, \Delta r_2, \ldots, \Delta r_m\}$ be the sequence of response times:
+
+\begin{equation}
+\mu_{\Delta r} = \frac{1}{m} \sum_{i=1}^{m} \Delta r_i \quad \text{(Mean)}
+\end{equation}
+\begin{equation}
+\sigma_{\Delta r}^2 = \frac{1}{m} \sum_{i=1}^{m} (\Delta r_i - \mu_{\Delta r})^2 \quad \text{(Variance)}
+\end{equation}
+\begin{equation}
+\sigma_{\Delta r} = \sqrt{\sigma_{\Delta r}^2} \quad \text{(Standard Deviation)}
+\end{equation}
+\begin{equation}
+\widetilde{\Delta r} = \text{median of } \{\Delta r_1, \ldots, \Delta r_m\} \quad \text{(Median)}
+\end{equation}
+\begin{equation}
+\widehat{\Delta r} = \text{mode of } \{\Delta r_1, \ldots, \Delta r_m\} \quad \text{(Mode)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\Delta r}^{\text{median}} = \frac{3(\mu_{\Delta r} - \widetilde{\Delta r})}{\sigma_{\Delta r}} \quad \text{(Skewness from Median)}
+\end{equation}
+\begin{equation}
+\text{Skew}_{\Delta r}^{\text{mode}} = \frac{\mu_{\Delta r} - \widehat{\Delta r}}{\sigma_{\Delta r}} \quad \text{(Skewness from Mode)}
+\end{equation}
+\begin{equation}
+\text{CV}_{\Delta r} = \frac{\sigma_{\Delta r}}{\mu_{\Delta r}} \quad \text{(Coefficient of Variation)}
+\end{equation}
+
+Response time features capture server-side behavior patterns. Benign DNS servers typically respond quickly and consistently, while malicious C2 servers may exhibit more variable response times due to additional processing or network evasion techniques.
+
+\subsubsection{Feature Summary}
+
+The selection of these 28 features is based on the CIC-DoHBrw-2020 dataset \cite{montazeri2020doh} and prior research demonstrating their effectiveness for encrypted traffic classification. The complete list of all 28 features is summarized in the following table:
+
+\begin{table}[H]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|l|l|}
+\hline
+\textbf{Category} & \textbf{Feature Names} & \textbf{Count} \\
+\hline
+Bytes-Level & FlowBytesSent, FlowSentRate, FlowBytesReceived, FlowReceivedRate & 4 \\
+\hline
+Packet Length & \makecell[l]{PacketLengthVariance, PacketLengthStandardDeviation,\\ PacketLengthMean, PacketLengthMedian, PacketLengthMode,\\ PacketLengthSkewFromMedian, PacketLengthSkewFromMode,\\ PacketLengthCoefficientofVariation} & 8 \\
+\hline
+Packet Time & \makecell[l]{PacketTimeVariance, PacketTimeStandardDeviation,\\ PacketTimeMean, PacketTimeMedian, PacketTimeMode,\\ PacketTimeSkewFromMedian, PacketTimeSkewFromMode,\\ PacketTimeCoefficientofVariation} & 8 \\
+\hline
+Response Time & \makecell[l]{ResponseTimeTimeVariance, ResponseTimeTimeStandardDeviation,\\ ResponseTimeTimeMean, ResponseTimeTimeMedian,\\ ResponseTimeTimeMode, ResponseTimeTimeSkewFromMedian,\\ ResponseTimeTimeSkewFromMode,\\ ResponseTimeTimeCoefficientofVariation} & 8 \\
+\hline
+\textbf{Total} & & \textbf{28} \\
+\hline
+\end{tabular}
+}
+\caption{Complete list of 28 statistical features extracted per flow}
+\label{tab:all_28_features}
+\end{table}
 
 \begin{figure}[H]
     \centering
@@ -84,8 +215,104 @@ XGBoost was selected as the primary classifier for ShieldX for several reasons:
 
 The ShieldX XGBoost model is configured with 200 trees (n\_estimators) and a maximum depth of 6, which balances model capacity with inference speed.
 
-\section{Technologies}
+\section{Random Forest}
 \label{section:3.4}
+
+\subsection{Algorithm Overview}
+
+Random Forest \cite{breiman2001random} is an ensemble learning method that operates by constructing a multitude of decision trees at training time and outputting the class that is the mode of the classes (classification) of the individual trees. It belongs to the family of bagging (Bootstrap Aggregating) methods, where each tree is trained on a different bootstrap sample of the original dataset.
+
+The algorithm introduces two sources of randomness: (i) each tree is trained on a different bootstrap sample (random sampling with replacement), and (ii) at each node split, only a random subset of features is considered for splitting. This dual randomization decorrelates the individual trees, reducing variance without substantially increasing bias.
+
+\subsection{Mathematical Foundation}
+
+For a given input vector $\mathbf{x}$, the Random Forest classifier produces a prediction by aggregating the outputs of $B$ individual trees:
+
+\begin{equation}
+\hat{y} = \text{mode}\left\{ T_b(\mathbf{x}) \right\}_{b=1}^{B}
+\end{equation}
+
+where $T_b(\mathbf{x})$ is the prediction of the $b$-th tree. Each tree is grown without pruning, and the Gini impurity is typically used as the splitting criterion:
+
+\begin{equation}
+G(t) = 1 - \sum_{i=1}^{C} p_i^2
+\end{equation}
+
+where $p_i$ is the proportion of samples belonging to class $i$ at node $t$, and $C$ is the number of classes.
+
+\subsection{Advantages for DoH Detection}
+
+Random Forest offers several advantages for encrypted traffic classification: it handles high-dimensional feature spaces naturally, provides feature importance scores for interpretability, is robust to outliers and noisy data, and does not require extensive hyperparameter tuning. The out-of-bag (OOB) error estimate provides an unbiased internal validation metric without requiring a separate validation set.
+
+\section{LightGBM}
+\label{section:3.5}
+
+\subsection{Algorithm Overview}
+
+LightGBM \cite{ke2017lightgbm} is a gradient boosting framework developed by Microsoft that uses tree-based learning algorithms. Unlike traditional gradient boosting decision tree (GBDT) implementations that grow trees by level (level-wise growth), LightGBM grows trees leaf-wise, meaning it chooses the leaf with the highest loss reduction to expand at each step.
+
+\subsection{Key Innovations}
+
+LightGBM introduces two key techniques to accelerate training while maintaining accuracy:
+
+\begin{itemize}
+    \item \textbf{Gradient-based One-Side Sampling (GOSS)}: GOSS retains instances with large gradients (i.e., poorly predicted samples) while randomly discarding instances with small gradients. This focuses the training on the most informative samples, significantly reducing the number of data instances used for information gain estimation.
+    \item \textbf{Exclusive Feature Bundling (EFB)}: EFB bundles mutually exclusive features (features that rarely take non-zero values simultaneously) to reduce the effective number of features. This is particularly effective for high-dimensional sparse data.
+\end{itemize}
+
+\subsection{Leaf-wise Tree Growth}
+
+The leaf-wise growth strategy can be formalized as:
+
+\begin{equation}
+\Delta L = \frac{(\sum_{i \in I_L} g_i)^2}{|I_L| + \lambda} + \frac{(\sum_{i \in I_R} g_i)^2}{|I_R| + \lambda} - \frac{(\sum_{i \in I} g_i)^2}{|I| + \lambda}
+\end{equation}
+
+where $g_i$ is the first-order gradient of the loss function at sample $i$, $I$, $I_L$, $I_R$ are the sets of indices at the current node, left child, and right child respectively, and $\lambda$ is the regularization parameter. The leaf with the maximum $\Delta L$ is selected for splitting at each iteration.
+
+\subsection{Advantages for DoH Detection}
+
+LightGBM excels in scenarios with large datasets and high-dimensional features. For the CIC-DoHBrw-2020 dataset, LightGBM's histogram-based algorithm reduces memory consumption significantly, and its leaf-wise growth often converges faster than level-wise alternatives. The resulting model is extremely compact, making it ideal for deployment on endpoints with limited storage.
+
+\section{Support Vector Machine}
+\label{section:3.6}
+
+\subsection{Algorithm Overview}
+
+Support Vector Machine (SVM) \cite{cortes1995support} is a supervised learning model that finds the optimal hyperplane separating classes in a high-dimensional feature space. The fundamental idea is to maximize the margin between the decision boundary and the nearest training samples from each class (the support vectors).
+
+\subsection{Mathematical Formulation}
+
+For a binary classification problem with training data $\{(\mathbf{x}_i, y_i)\}_{i=1}^{N}$, where $y_i \in \{-1, +1\}$, SVM solves the following optimization problem:
+
+\begin{equation}
+\min_{\mathbf{w}, b} \frac{1}{2} \|\mathbf{w}\|^2 + C \sum_{i=1}^{N} \xi_i
+\end{equation}
+
+subject to the constraints:
+
+\begin{equation}
+y_i(\mathbf{w}^T \phi(\mathbf{x}_i) + b) \geq 1 - \xi_i, \quad \xi_i \geq 0, \quad \forall i
+\end{equation}
+
+where $\mathbf{w}$ is the weight vector, $b$ is the bias term, $C$ is the regularization parameter controlling the trade-off between margin maximization and classification error, $\xi_i$ are slack variables for non-separable data, and $\phi$ is the kernel function mapping inputs to a higher-dimensional space.
+
+\subsection{Kernel Trick}
+
+The kernel trick enables SVM to learn non-linear decision boundaries without explicitly computing the transformed feature vectors. The RBF (Radial Basis Function) kernel, used in the ShieldX SVM model, is defined as:
+
+\begin{equation}
+K(\mathbf{x}_i, \mathbf{x}_j) = \exp\left(-\gamma \|\mathbf{x}_i - \mathbf{x}_j\|^2\right)
+\end{equation}
+
+where $\gamma$ controls the influence of each training sample. The RBF kernel can handle non-linear relationships in the feature space and has fewer numerical difficulties than polynomial kernels.
+
+\subsection{Limitations for DoH Detection}
+
+SVM faces several challenges for large-scale DoH traffic classification: (i) training complexity scales quadratically with the number of samples, making it impractical for the full CIC-DoHBrw-2020 dataset; (ii) inference requires computing the kernel function with all support vectors, leading to slower predictions; (iii) SVM does not naturally produce probability estimates without additional Platt scaling; and (iv) performance is sensitive to feature scaling, requiring careful pre-processing.
+
+\section{Technologies}
+\label{section:3.7}
 
 \subsection{Python and Scapy}
 
@@ -106,6 +333,35 @@ React is a JavaScript library for building user interfaces, while Chakra UI prov
 \subsection{nftables}
 
 nftables is the successor to iptables in the Linux kernel, providing a framework for packet filtering and classification. ShieldX uses nftables to enforce domain whitelists on agent endpoints. When the whitelist is updated, the agent resolves whitelisted domains to IP addresses and creates nftables rules that accept traffic to those IPs while dropping all other outbound traffic.
+
+\subsection{Scikit-learn}
+
+Scikit-learn \cite{scikit-learn} is a comprehensive machine learning library for Python that provides unified APIs for classification, regression, clustering, dimensionality reduction, and model evaluation. In ShieldX's model training pipeline, scikit-learn is used for: (i) data preprocessing and feature scaling via its \texttt{StandardScaler} and \texttt{LabelEncoder} utilities; (ii) stratified train-test splitting to preserve class distribution; (iii) training the Random Forest and SVM classifiers; and (iv) model evaluation through metrics such as accuracy, precision, recall, F1-score, ROC-AUC, and confusion matrices. The \texttt{joblib} library, which is part of the scikit-learn ecosystem, is used for serializing and deserializing trained models for deployment.
+
+\subsection{Training Pipeline}
+
+The ShieldX model training pipeline is orchestrated by \texttt{train\_all\_models.py}, which sequentially executes four independent training scripts, one for each algorithm. Each script follows a consistent workflow:
+
+\begin{enumerate}
+    \item \textbf{Data Loading}: The CIC-DoHBrw-2020 dataset is loaded from CSV format using pandas.
+    \item \textbf{Preprocessing}: Missing numerical values are imputed with the median of each feature column. The feature matrix and label vector are separated.
+    \item \textbf{Splitting}: An 80/20 stratified train-test split ensures that the class distribution is preserved in both subsets.
+    \item \textbf{Training}: The model is trained on the training set with algorithm-specific hyperparameters.
+    \item \textbf{Evaluation}: Accuracy and a full classification report (precision, recall, F1-score per class) are computed on the held-out test set.
+    \item \textbf{Serialization}: The trained model is saved to disk in a platform-independent format for later deployment.
+\end{enumerate}
+
+The pipeline is fully automated and reproducible: the fixed random\_state=42 ensures that the same train-test split is used across all models, enabling fair comparison. Each trained model file is stored at the ShieldX project root, from where the agent can load it at runtime.
+
+\subsection{Model Serialization Formats}
+
+Each machine learning framework uses its own serialization format for trained models:
+
+\begin{itemize}
+    \item \textbf{joblib} (Random Forest, SVM): Python's joblib library provides efficient serialization of large numpy arrays and scikit-learn estimators. The resulting files (\texttt{random\_forest\_model.joblib}, \texttt{svm\_model.joblib}) can be loaded into any Python environment with compatible library versions.
+    \item \textbf{LightGBM text format} (\texttt{lightgbm\_model.txt}): LightGBM's native text format stores the tree structure, split conditions, and leaf values in a human-readable format. This enables cross-language deployment and inspection of the model structure.
+    \item \textbf{XGBoost JSON format} (\texttt{xgboost\_model.json}): XGBoost's JSON serialization stores the complete model including tree structures, base scores, and configuration parameters. The JSON format is language-agnostic and can be loaded by XGBoost libraries in Python, R, Java, C++, and other languages.
+\end{itemize}
 
 \subsection{CIC-DoHBrw-2020 Dataset}
 

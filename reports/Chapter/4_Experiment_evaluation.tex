@@ -37,11 +37,68 @@ The system comprises the following packages, organized into distinct architectur
     \item \textbf{shieldx-web-frontend}: The React frontend package containing page components (pages), API client (api.ts), type definitions (types.ts), and theme configuration (theme.ts).
 \end{itemize}
 
+The ShieldX system is organized into multiple architectural layers, each with a distinct responsibility. The following subsections detail each layer's package structure and internal dependencies.
+
+\subsubsection{Frontend Layer (ShieldX-web Dashboard)}
+
+The frontend layer is a React single-page application (SPA) built with TypeScript and Chakra UI. It communicates with the backend exclusively through REST API calls via the Axios HTTP client. The layer is divided into four page components, a shared API client module, and TypeScript type definitions.
+
+The frontend package (\texttt{shieldx-web-frontend}) follows a flat page-based structure: \texttt{pages/} contains four main views (Dashboard, Agents, MalwareAlerts, Whitelist), \texttt{api.ts} provides typed API functions via Axios, and \texttt{types.ts} defines TypeScript interfaces for the data models. The application is built with Vite and uses Chakra UI for responsive layout components.
+
+\subsubsection{Backend Layer (ShieldX-web API)}
+
+The backend layer implements a FastAPI REST API that follows a layered architecture pattern. The application factory in \texttt{app/main.py} configures middleware, registers routers, and manages the application lifecycle. Configuration is managed through Pydantic settings in \texttt{app/config.py}. The API layer (\texttt{api/v1/}) contains route handlers and dependency injection functions. The middleware layer provides request logging via a custom ASGI middleware. The models layer defines Pydantic schemas for request/response validation. The utils layer provides centralized logging configuration. The services layer contains reusable business logic, and the exceptions layer defines application-specific error types.
+
+\subsubsection{Agent Core Layer (ShieldX Agent)}
+
+The agent core layer is the heart of the ShieldX endpoint agent. It provides two execution modes: the full orchestrator (\texttt{agent\_orchestrator.py}) that integrates heartbeat, whitelist management, and detection; and the lightweight scheduler (\texttt{agent\_scheduler.py}) that runs only the detection pipeline on a timer.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/package_diagram.png}
-    \caption{Package dependency diagram of the ShieldX system}
-    \label{fig:package_diagram}
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/diagram_agent_core.png}
+    \caption{Agent core layer: entry point, orchestrator, scheduler, domain modules, and supporting utilities}
+    \label{fig:diagram_agent_core}
+\end{figure}
+
+The domain layer consists of three key modules: \texttt{pipeline.py} orchestrates the end-to-end detection flow (packet capture, feature extraction, ML inference), \texttt{firewall.py} manages nftables-based domain whitelist enforcement, and \texttt{system\_info.py} collects endpoint system information for agent registration. The logging configuration is centralized in \texttt{config/logging\_config.py}.
+
+\subsubsection{Packet Processing Layer}
+
+The packet processing layer is the most architecturally complex subsystem, responsible for transforming raw network packets into structured statistical features. It is organized into multiple sub-packages for separation of concerns.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\textwidth]{Figure/Chapter4/diagram_packet_processing.png}
+    \caption{Packet processing layer: flow session management, flow objects, feature extractors, time-series analysis, and support modules}
+    \label{fig:diagram_packet_processing}
+\end{figure}
+
+\texttt{flow\_session.py} defines a custom Scapy session that intercepts packets, groups them into bidirectional flows, and manages flow lifecycle (creation, update, expiration, garbage collection). \texttt{flow.py} represents a single flow and provides the \texttt{get\_data()} method that computes the 28 statistical features by delegating to four feature extractor classes: \texttt{FlowBytes}, \texttt{PacketLength}, \texttt{PacketTime}, and \texttt{ResponseTime}. The context sub-package (\texttt{features/context/}) provides foundational types such as \texttt{PacketDirection} and \texttt{PacketFlowKey} that are used across multiple feature extractors. The time-series sub-package provides an alternative clump-based flow representation for specialized analysis.
+
+\subsubsection{ML Model Training Layer}
+
+The model training layer is independent from the agent runtime and is used exclusively during development to train and evaluate the four machine learning models.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter4/diagram_ml_models.png}
+    \caption{ML model training pipeline: from dataset preparation to trained model export and production deployment}
+    \label{fig:diagram_ml_models}
+\end{figure}
+
+The training pipeline is orchestrated by \texttt{train\_all\_models.py}, which spawns each model training script as a separate subprocess. All four scripts (\texttt{random\_forest.py}, \texttt{lightgbm\_model.py}, \texttt{xgboost\_model.py}, \texttt{svm\_model.py}) share the same data preprocessing module (\texttt{preprocess.py}) for loading and preparing the CIC-DoHBrw-2020 dataset. The \texttt{merge\_and\_prepare.py} script handles initial data merging of benign and malicious CSV files.
+
+\subsubsection{External Libraries and Frameworks}
+
+The ShieldX system depends on a rich ecosystem of open-source libraries and frameworks that span packet manipulation, machine learning, web development, and system utilities.
+
+These external dependencies are managed through the \texttt{requirements.txt} file in the ShieldX project root. The agent runtime dependencies (Scapy, XGBoost, NumPy, APScheduler) are kept minimal for lightweight deployment, while the training and backend dependencies (scikit-learn, FastAPI, Pydantic) are isolated in separate environments.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.90\textwidth]{Figure/Chapter4/package_dependency_diagram.png}
+    \caption{Package dependency diagram showing module relationships across the ShieldX system}
+    \label{fig:package_dependency}
 \end{figure}
 
 \subsection{Detailed package design}
@@ -320,11 +377,11 @@ The XGBoost model was trained on the CIC-DoHBrw-2020 dataset with an 80/20 strat
 \hline
 \textbf{Metric} & \textbf{Value} \\
 \hline
-Accuracy & 99.2\% \\
-Precision (Malicious) & 99.1\% \\
-Recall (Malicious) & 99.3\% \\
-F1-Score (Malicious) & 99.2\% \\
-ROC-AUC & 0.998 \\
+Accuracy & 99.995\% \\
+Precision (Malicious) & 99.99\% \\
+Recall (Malicious) & 99.996\% \\
+F1-Score (Malicious) & 99.995\% \\
+ROC-AUC & 1.000 \\
 \hline
 \end{tabular}
 \caption{XGBoost model performance on the CIC-DoHBrw-2020 test set}
@@ -332,5 +389,138 @@ ROC-AUC & 0.998 \\
 \end{table}
 
 The model was trained with 200 trees (n\_estimators) and a maximum tree depth of 6. Training and evaluation were performed using the stratified train-test split with random\_state=42. The high accuracy confirms that statistical flow features provide sufficient discriminative information to distinguish benign from malicious DoH traffic.
+
+\section{Model Comparison and Evaluation}
+\label{section:4.6}
+
+While the ShieldX production agent uses XGBoost as its primary classifier, four different machine learning models were trained and evaluated on the CIC-DoHBrw-2020 dataset to identify the most suitable algorithm for real-time DoH traffic classification. This section presents a comprehensive comparison of Random Forest, LightGBM, XGBoost, and Support Vector Machine (SVM) classifiers.
+
+\subsection{Experimental Setup}
+\label{section:4.6.1}
+
+All models were evaluated under identical conditions to ensure a fair comparison:
+
+\begin{itemize}
+    \item \textbf{Dataset}: CIC-DoHBrw-2020 with 499,106 labeled network flows (28 statistical features).
+    \item \textbf{Train/Test Split}: 80/20 stratified split with random\_state=42, yielding 399,284 training samples and 99,822 test samples.
+    \item \textbf{Evaluation Metrics}: Accuracy, Precision, Recall, F1-Score (Malicious class), ROC-AUC, False Positive Rate (FPR), model size, and inference time.
+    \item \textbf{Hardware}: All models were trained and evaluated on the same workstation to ensure consistent timing measurements.
+\end{itemize}
+
+\subsection{Model Configuration}
+\label{section:4.6.2}
+
+Each model was configured with hyperparameters that balance classification performance with computational efficiency:
+
+\begin{itemize}
+    \item \textbf{Random Forest}: 100 decision trees (n\_estimators=100), random\_state=42, n\_jobs=2. Random Forest builds an ensemble of decision trees on bootstrapped training samples and averages their predictions. It is known for its robustness against overfitting and ability to handle high-dimensional feature spaces.
+    \item \textbf{LightGBM}: 100 boosting iterations (n\_estimators=100), random\_state=42, n\_jobs=-1, with early stopping (patience=10 rounds) based on validation log-loss. LightGBM is a gradient boosting framework that uses leaf-wise tree growth, which often results in faster training and lower memory usage compared to level-wise growth.
+    \item \textbf{XGBoost}: 200 trees (n\_estimators=200), max\_depth=6, random\_state=42. XGBoost (Extreme Gradient Boosting) implements regularized gradient boosting with L1 and L2 regularization, handling missing values automatically and supporting efficient parallel computation.
+    \item \textbf{SVM}: Radial Basis Function (RBF) kernel, C=1, max\_iter=1000. SVM finds the optimal hyperplane that maximizes the margin between classes in a transformed feature space. The RBF kernel enables non-linear decision boundaries.
+\end{itemize}
+
+\subsection{Quantitative Results}
+\label{section:4.6.3}
+
+The following table summarizes the performance of all four models on the held-out test set:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Acc.} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{ROC-AUC} & \textbf{FPR} & \textbf{Size} \\
+\hline
+Random Forest & 99.99\% & 100.00\% & 99.98\% & 99.99\% & 100.00\% & 0.002\% & 8,027 KB \\
+LightGBM      & 99.99\% & 99.98\%  & 100.00\% & 99.99\% & 100.00\% & 0.016\% & 96 KB    \\
+XGBoost       & 100.00\%& 99.99\%  & 100.00\% & 100.00\%& 100.00\% & 0.006\% & 328 KB   \\
+SVM           & 73.95\% & 81.03\%  & 62.54\%  & 70.59\% & 69.07\%  & 14.64\% & 479 KB   \\
+\hline
+\end{tabular}
+\caption{Performance comparison of the four trained models on the CIC-DoHBrw-2020 test set (99,822 flows). Metrics show Malicious class scores.}
+\label{tab:model_comparison}
+\end{table}
+
+\subsection{Detailed Error Analysis}
+\label{section:4.6.4}
+
+The confusion matrices for each model reveal the nature of classification errors:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{TP} & \textbf{TN} & \textbf{FP} & \textbf{FN} \\
+\hline
+Random Forest & 49,903 & 49,910 & 1 & 8 \\
+LightGBM      & 49,909 & 49,903 & 8 & 2 \\
+XGBoost       & 49,909 & 49,908 & 3 & 2 \\
+SVM           & 31,212 & 42,603 & 7,308 & 18,699 \\
+\hline
+\end{tabular}
+\caption{Confusion matrix comparison on 99,822 test samples}
+\label{tab:confusion_matrices}
+\end{table}
+
+The tree-based ensemble models (Random Forest, LightGBM, XGBoost) achieve near-perfect classification with only single-digit errors out of nearly 100,000 test samples. The SVM model, however, struggles significantly, misclassifying over 26,000 samples with a particularly high false negative rate (18,699 missed malicious flows).
+
+\subsection{Computational Efficiency}
+\label{section:4.6.5}
+
+For real-time deployment on endpoint devices, model size and inference speed are critical considerations:
+
+\begin{itemize}
+    \item \textbf{Random Forest}: The largest model at 8,027 KB due to storing all 100 decision trees explicitly. Inference time is moderate at 0.60 seconds for the full test set (approximately 6 microseconds per sample).
+    \item \textbf{LightGBM}: The most compact model at only 96 KB, achieved through LightGBM's efficient histogram-based tree representation. Inference is slightly slower (1.11 seconds for the test set) due to leaf-wise tree traversal.
+    \item \textbf{XGBoost}: A balanced choice at 328 KB with the fastest inference time (0.29 seconds for the full test set, approximately 2.9 microseconds per sample). XGBoost's level-wise tree growth enables efficient SIMD-optimized evaluation.
+    \item \textbf{SVM}: Moderate size at 479 KB but the slowest inference (17.24 seconds for the test set, approximately 173 microseconds per sample) due to the kernel computation required for each prediction.
+\end{itemize}
+
+\subsection{Discussion and Model Selection}
+\label{section:4.6.6}
+
+The experimental results demonstrate that tree-based ensemble methods significantly outperform SVM for the task of DoH traffic classification using statistical flow features. All three tree-based models achieve accuracy exceeding 99.99\%, confirming that the 28 statistical features provide highly discriminative information for distinguishing benign from malicious encrypted traffic.
+
+XGBoost was selected as the production model for ShieldX based on the following rationale:
+
+\begin{itemize}
+    \item \textbf{Best overall accuracy}: XGBoost achieves 100.00\% accuracy (rounded to four decimal places) with only 5 total misclassifications across 99,822 test samples.
+    \item \textbf{Fastest inference}: At 2.9 microseconds per sample, XGBoost is the most suitable for real-time classification on resource-constrained endpoints.
+    \item \textbf{Compact model size}: 328 KB is easily deployable and fits in device memory without issue.
+    \item \textbf{Proven reliability}: XGBoost has been widely adopted in both academic research and industrial applications for tabular data classification.
+\end{itemize}
+
+The near-perfect results also suggest that the CIC-DoHBrw-2020 dataset, while comprehensive, may contain inherent patterns that are relatively easy for tree-based models to exploit. Future work should explore cross-dataset validation to assess generalization to unseen DoH traffic patterns.
+
+\subsection{Feature Importance Analysis}
+\label{section:4.6.7}
+
+XGBoost provides built-in feature importance scores that reveal which statistical features contribute most to the classification decision. The top 10 most important features are:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|}
+\hline
+\textbf{Feature} & \textbf{Importance (F-score)} \\
+\hline
+PacketLengthMean & 187 \\
+ResponseTimeTimeSkewFromMedian & 126 \\
+PacketTimeMean & 117 \\
+PacketLengthMedian & 105 \\
+FlowBytesReceived & 98 \\
+ResponseTimeTimeMean & 92 \\
+PacketLengthCoefficientofVariation & 88 \\
+PacketTimeVariance & 82 \\
+FlowBytesSent & 79 \\
+ResponseTimeTimeMedian & 71 \\
+\hline
+\end{tabular}
+\caption{Top 10 most important features according to the XGBoost model}
+\label{tab:feature_importance}
+\end{table}
+
+Packet length statistics dominate the top features, indicating that the distribution of packet payload sizes is the most discriminative characteristic for distinguishing benign from malicious DoH traffic. Response time features and byte-level volume metrics also contribute significantly, while packet timing features play a comparatively smaller role.
 
 \end{document}

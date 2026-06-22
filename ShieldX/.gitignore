@@ -229,3 +229,4 @@ datasets/
 *.joblib
 *.json
 agent_config.yaml
+lightgbm_model.txt

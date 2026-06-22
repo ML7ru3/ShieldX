@@ -1,4 +1,4 @@
-from sqlmodel import Field, SQLModel, Relationship
+from sqlmodel import Field, SQLModel, Relationship, Column, Text
 from typing import List, Optional
 from datetime import datetime
 
@@ -16,7 +16,7 @@ class MalwareAlert(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     agent_id: str = Field(index=True, foreign_key="agent.agent_id")
     malware_type: str
-    details: Optional[str] = None
+    details: Optional[str] = Field(default=None, sa_column=Column(Text))
     detected_at: datetime = Field(default_factory=datetime.utcnow)
 
     agent: Agent = Relationship(back_populates="malware_alerts")

@@ -1,17 +1,16 @@
-# Agent Pipeline Configuration Example
-# Sửa các URL endpoint cho phù hợp với hệ thống của bạn
+# ShieldX Agent Configuration Example
+# API endpoints point to ShieldX-web backend
+# Copy to agent_config.yaml and adjust endpoints
 
 api:
-  register: "https://your.api/register"
-  heartbeat: "https://your.api/heartbeat"
-  malware_alert: "https://your.api/report-malware"
-  get_whitelist: "https://your.api/domain/whitelist"
+  register: "http://localhost:8000/heartbeat/"
+  heartbeat: "http://localhost:8000/heartbeat/"
+  malware_alert: "http://localhost:8000/report-malware/"
+  get_whitelist: "http://localhost:8000/domain/whitelist/"
 
-heartbeat_interval: 90         # seconds (1.5 phút)
-log_path: "agent.log"          # Đường dẫn file log
+heartbeat_interval: 90         # seconds (1.5 minutes)
+sniff_duration: 120            # seconds (2 minutes)
+log_path: "agent.log"          # Log file path
 ml_model:
-  path: "ml_model.sock"       # Địa chỉ local model (có thể là path sock, pipe, hay thông tin module)
+  path: "xgboost_model.json"   # XGBoost model file name
 interface_scan_interval: 30    # seconds
-
-# Các thông số khác mở rộng trong tương lai
-# ...
