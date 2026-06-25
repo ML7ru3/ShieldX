@@ -1,15 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from database import get_session
-from models import WhitelistDomain
-from schemas import WhitelistDomainCreate, WhitelistDomainRead, WhitelistDomainUpdate, WhitelistDomainsResponse
+from models import WhitelistDomain, WhitelistConfig
+from schemas import WhitelistDomainCreate, WhitelistDomainRead, WhitelistDomainUpdate, WhitelistDomainsResponse, WhitelistConfigToggle
 
 router = APIRouter()
 
 @router.get("/", response_model=WhitelistDomainsResponse)
 def get_whitelist_domains(*, session: Session = Depends(get_session)):
     domains = session.exec(select(WhitelistDomain)).all()
-    return {"domains": domains}
+    config = session.get(WhitelistConfig, 1)
+    return {"domains": domains, "whitelist_enabled": config.enabled if config else True}
+
+@router.get("/toggle")
+def get_whitelist_toggle(*, session: Session = Depends(get_session)):
+    config = session.get(WhitelistConfig, 1)
+    return {"enabled": config.enabled if config else True}
+
+@router.put("/toggle")
+def set_whitelist_toggle(*, session: Session = Depends(get_session), body: WhitelistConfigToggle):
+    config = session.get(WhitelistConfig, 1)
+    if not config:
+        config = WhitelistConfig(id=1, enabled=body.enabled)
+    else:
+        config.enabled = body.enabled
+    session.add(config)
+    session.commit()
+    session.refresh(config)
+    return {"enabled": config.enabled}
 
 @router.post("/", response_model=WhitelistDomainRead)
 def create_whitelist_domain(

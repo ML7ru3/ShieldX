@@ -5,7 +5,8 @@ import sys
 scripts = [
     "src/models/random_forest.py",
     "src/models/lightgbm_model.py",
-    "src/models/xgboost_model.py",
+    "src/models/xgboost_model.py",  # Layer 2: Malicious vs Benign
+    "src/models/l1_xgboost.py",     # Layer 1: DoH vs Non-DoH
     "src/models/svm_model.py",
 ]
 

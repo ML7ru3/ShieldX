@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard'
 import Agents from './pages/Agents'
 import MalwareAlerts from './pages/MalwareAlerts'
 import Whitelist from './pages/Whitelist'
+import AgentDetail from './pages/AgentDetail'
+import type { Agent } from './types'
 
 const pages = [
   { key: 'dashboard', label: 'Dashboard', icon: FiGrid },
@@ -22,6 +24,7 @@ type PageKey = typeof pages[number]['key']
 
 export default function App() {
   const [active, setActive] = useState<PageKey>('dashboard')
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const { colorMode, toggleColorMode } = useColorMode()
   const isDark = colorMode === 'dark'
 
@@ -30,10 +33,21 @@ export default function App() {
   const activeColor = isDark ? 'white' : 'blue.600'
   const textColor = isDark ? 'gray.400' : 'gray.500'
 
+  const handleSelectAgent = (agent: Agent) => {
+    setSelectedAgent(agent)
+  }
+
+  const handleBackToAgents = () => {
+    setSelectedAgent(null)
+  }
+
   const renderPage = () => {
+    if (selectedAgent) {
+      return <AgentDetail agent={selectedAgent} onBack={handleBackToAgents} />
+    }
     switch (active) {
       case 'dashboard': return <Dashboard />
-      case 'agents': return <Agents />
+      case 'agents': return <Agents onSelectAgent={handleSelectAgent} />
       case 'malware': return <MalwareAlerts />
       case 'whitelist': return <Whitelist />
     }
@@ -71,16 +85,16 @@ export default function App() {
             <HStack
               key={p.key}
               as="button"
-              onClick={() => setActive(p.key)}
+              onClick={() => { setActive(p.key); setSelectedAgent(null) }}
               spacing={3}
               px={3}
               py={3}
               borderRadius="xl"
-              bg={active === p.key ? activeBg : 'transparent'}
-              color={active === p.key ? activeColor : textColor}
-              fontWeight={active === p.key ? 'semibold' : 'medium'}
+              bg={active === p.key && !selectedAgent ? activeBg : 'transparent'}
+              color={active === p.key && !selectedAgent ? activeColor : textColor}
+              fontWeight={active === p.key && !selectedAgent ? 'semibold' : 'medium'}
               fontSize="sm"
-              _hover={{ bg: active === p.key ? activeBg : (isDark ? 'gray.800' : 'gray.50') }}
+              _hover={{ bg: active === p.key && !selectedAgent ? activeBg : (isDark ? 'gray.800' : 'gray.50') }}
               transition="all 0.2s"
             >
               <Icon as={p.icon} w={5} h={5} />

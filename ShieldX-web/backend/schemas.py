@@ -61,3 +61,28 @@ class WhitelistDomainRead(WhitelistDomainBase):
 
 class WhitelistDomainsResponse(BaseModel):
     domains: List[WhitelistDomainRead]
+    whitelist_enabled: bool = True
+
+# --- WhitelistConfig Schemas ---
+class WhitelistConfigToggle(BaseModel):
+    enabled: bool
+
+# --- RecentDomain Schemas ---
+class RecentDomainBase(BaseModel):
+    agent_id: str
+    domain: str
+    ip: str = ""
+
+class RecentDomainCreate(BaseModel):
+    domains: List[RecentDomainBase]
+
+class RecentDomainRead(BaseModel):
+    id: int
+    agent_id: str
+    domain: str
+    ip: str
+    first_seen: datetime
+    last_seen: datetime
+
+    class Config:
+        from_attributes = True

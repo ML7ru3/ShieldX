@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
 import {
   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-  Badge, Spinner, Flex, VStack, Alert, AlertIcon,
+  Badge, Spinner, Flex, VStack, Alert, AlertIcon, Button,
   useColorModeValue,
 } from '@chakra-ui/react'
+import { SearchIcon } from '@chakra-ui/icons'
 import axios from 'axios'
 import type { Agent } from '../types'
 
-export default function Agents() {
+interface Props {
+  onSelectAgent: (agent: Agent) => void
+}
+
+export default function Agents({ onSelectAgent }: Props) {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -46,6 +51,7 @@ export default function Agents() {
               <Th>Status</Th>
               <Th>First Seen</Th>
               <Th>Last Seen</Th>
+              <Th textAlign="center">Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -61,10 +67,24 @@ export default function Agents() {
                 </Td>
                 <Td fontSize="sm" color="gray.500">{formatTime(agent.first_seen)}</Td>
                 <Td fontSize="sm" color="gray.500">{formatTime(agent.last_seen)}</Td>
+                <Td>
+                  <Flex justify="center">
+                    <Button
+                      size="sm"
+                      leftIcon={<SearchIcon />}
+                      colorScheme="blue"
+                      variant="ghost"
+                      borderRadius="full"
+                      onClick={() => onSelectAgent(agent)}
+                    >
+                      Details
+                    </Button>
+                  </Flex>
+                </Td>
               </Tr>
             ))}
             {agents.length === 0 && (
-              <Tr><Td colSpan={6} textAlign="center" py={8} color="gray.400">No agents registered yet</Td></Tr>
+              <Tr><Td colSpan={7} textAlign="center" py={8} color="gray.400">No agents registered yet</Td></Tr>
             )}
           </Tbody>
         </Table>

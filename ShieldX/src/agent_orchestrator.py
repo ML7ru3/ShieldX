@@ -2,7 +2,9 @@
 ShieldX Agent Orchestrator
 - Reads API endpoint config from config file
 - Collects system info and selects network interface
-- Fetches/Refreshes domain whitelist from API
+- Fetches/Refreshes domain whitelist from API + toggle status
+- Applies/flushes nftables firewall rules based on whitelist toggle
+- Monitors recent outbound domains and reports to API
 - Runs detection pipeline: packet capture, feature extraction, ML prediction
 - Periodically sends heartbeat + updates whitelist
 - Sends malware alerts to backend API
@@ -18,7 +20,9 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from domains import system_info
-from domains.pipeline import load_model, capture_and_predict
+from domains.pipeline import load_model, load_l1_model, get_l1_manager, capture_and_predict
+from domains.firewall import FirewallManager
+from domains.network_monitor import NetworkMonitor
 
 CONFIG_PATH = os.environ.get("SHIELDX_CONFIG", "agent_config.yaml")
 
@@ -84,6 +88,7 @@ class DomainWL:
     def __init__(self):
         self.set = set()
         self.version = None
+        self.enabled = True
     def reload_all(self, domlist, ver=None):
         self.set = set(domlist)
         self.version = ver
@@ -91,8 +96,23 @@ class DomainWL:
         return d in self.set
 
 
+# ----- FIREWALL APPLY/FLUSH -----
+_fw = FirewallManager()
+
+def apply_firewall_rules(wl: DomainWL):
+    if wl.enabled and wl.set:
+        _fw.apply_whitelist(list(wl.set))
+        logger.info("Firewall whitelist APPLIED (%d domains)", len(wl.set))
+    elif not wl.enabled:
+        _fw.flush()
+        logger.info("Firewall whitelist FLUSHED (toggle OFF)")
+    else:
+        _fw.flush()
+        logger.info("Firewall whitelist FLUSHED (no domains)")
+
+
 # ----- EVENT SCHEDULER ------
-def run_heartbeat(cfg, agent_id, hostname, iface, wl):
+def run_heartbeat(cfg, agent_id, hostname, iface, wl, monitor):
     try:
         ip = get_interface_ip(iface)
         payload = {
@@ -103,6 +123,7 @@ def run_heartbeat(cfg, agent_id, hostname, iface, wl):
         res = requests.post(cfg['api']['heartbeat'], json=payload, timeout=8)
         res.raise_for_status()
         _fetch_whitelist(cfg, wl)
+        _send_recent_domains(cfg, agent_id, monitor)
     except Exception as e:
         logger.error("HEARTBEAT failed: %s", e)
 
@@ -113,10 +134,40 @@ def _fetch_whitelist(cfg, wl):
         res.raise_for_status()
         data = res.json()
         domains = [d['domain'] for d in data.get('domains', [])]
+        new_enabled = data.get('whitelist_enabled', True)
+
+        if new_enabled != wl.enabled:
+            logger.info("Whitelist toggle changed: %s -> %s",
+                        "enabled" if wl.enabled else "disabled",
+                        "enabled" if new_enabled else "disabled")
+            wl.enabled = new_enabled
+            apply_firewall_rules(wl)
+
         wl.reload_all(domains, None)
-        logger.info("Refreshed domain whitelist (%d domains)", len(wl.set))
+        logger.info("Refreshed domain whitelist (%d domains, enabled=%s)",
+                    len(wl.set), wl.enabled)
     except Exception as e:
         logger.error("Whitelist update failed: %s", e)
+
+
+def _send_recent_domains(cfg, agent_id, monitor: NetworkMonitor):
+    try:
+        entries = monitor.get_domains()
+        if not entries:
+            return
+        domains_payload = [
+            {"agent_id": agent_id, "domain": e.domain, "ip": e.ip}
+            for e in entries[-50:]
+        ]
+        res = requests.post(
+            cfg['api']['report_recent_domains'],
+            json={"domains": domains_payload},
+            timeout=10,
+        )
+        res.raise_for_status()
+        logger.debug("Reported %d recent domains", len(domains_payload))
+    except Exception as e:
+        logger.debug("Failed to report recent domains: %s", e)
 
 
 # ----- MALWARE ALERT -----
@@ -148,8 +199,9 @@ def pipeline_round(cfg, agent_id, iface, wl):
     logger.info(">>> Pipeline round started (iface: %s)", iface)
     try:
         results = capture_and_predict(interface=iface, sniff_duration=cfg.get("sniff_duration", 120))
-        for features, pred in results:
-            if pred == 1:
+        for item in results:
+            features, l1_pred, l2_pred = item[0], item[1], item[2]
+            if l1_pred == 1 and l2_pred == 1:
                 send_malware_alert(cfg, agent_id, features)
     except Exception as e:
         logger.error("Error in pipeline round: %s", e)
@@ -188,14 +240,31 @@ def main():
 
     whitelist = DomainWL()
     _fetch_whitelist(cfg, whitelist)
+    apply_firewall_rules(whitelist)
+
+    monitor = NetworkMonitor(maxlen=50)
 
     load_model()
+    load_l1_model()
 
     sched = BackgroundScheduler()
-    sched.add_job(lambda: run_heartbeat(cfg, agent_id, hostname, iface, whitelist), 'interval', seconds=cfg.get('heartbeat_interval', 90))
-    sched.add_job(lambda: pipeline_round(cfg, agent_id, iface, whitelist), 'interval', seconds=cfg.get('sniff_duration', 120))
+    sched.add_job(
+        lambda: run_heartbeat(cfg, agent_id, hostname, iface, whitelist, monitor),
+        'interval',
+        seconds=cfg.get('heartbeat_interval', 90)
+    )
+    sched.add_job(
+        lambda: monitor.scan(),
+        'interval',
+        seconds=cfg.get('network_scan_interval', 60)
+    )
+    sched.add_job(
+        lambda: pipeline_round(cfg, agent_id, iface, whitelist),
+        'interval',
+        seconds=cfg.get('sniff_duration', 120)
+    )
     sched.start()
-    logger.info("Scheduler started (heartbeat & pipeline & whitelist reload)")
+    logger.info("Scheduler started (heartbeat, network scan, pipeline, whitelist reload)")
 
     try:
         while True:

@@ -3,7 +3,7 @@ import time
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from domains.pipeline import load_model, capture_and_predict
+from domains.pipeline import load_model, load_l1_model, capture_and_predict
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ def scheduled_task():
     logger.info("=== Scheduled pipeline run started ===")
     try:
         results = capture_and_predict(interface='ens33', sniff_duration=120)
-        malicious = sum(1 for _, pred in results if pred == 1)
+        malicious = sum(1 for _, l1_pred, l2_pred in results if l1_pred == 1 and l2_pred == 1)
         logger.info(
             "=== Pipeline finished: %d flows, %d malicious ===",
             len(results), malicious,
@@ -23,6 +23,7 @@ def scheduled_task():
 
 def main():
     load_model()
+    load_l1_model()
     scheduler = BackgroundScheduler()
     scheduler.add_job(scheduled_task, 'interval', minutes=2)
     scheduler.start()

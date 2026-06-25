@@ -17,7 +17,7 @@ The ShieldX agent implements an end-to-end detection pipeline that bridges this 
     \item \textbf{Packet Capture}: Using Scapy's AsyncSniffer, the agent captures live TLSv1.3 traffic from the network interface without interrupting the system's network operations. The sniffer runs in a background thread and passes captured packets to the FlowCollector for processing. The capture is filtered to TCP traffic on port 443 (HTTPS), which is where DoH traffic operates.
     \item \textbf{Flow Assembly}: Captured packets are grouped into bidirectional flows using a custom FlowSession implementation with configurable expiration and garbage collection parameters. A flow is identified by the 5-tuple (Source IP, Source Port, Destination IP, Destination Port, Protocol). Each flow has a configurable idle timeout (default 40 seconds) and a maximum duration (default 120 seconds) after which it is considered complete.
     \item \textbf{Feature Extraction}: For each completed flow, 28 statistical features are computed using optimized Python classes organized into four groups: \texttt{FlowBytes} (bytes-level metrics), \texttt{PacketLength} (distribution statistics), \texttt{PacketTime} (timing patterns), and \texttt{ResponseTime} (server response behavior). Each class computes eight statistical measures: variance, standard deviation, mean, median, mode, skewness from median, skewness from mode, and coefficient of variation.
-    \item \textbf{ML Classification}: Features are passed to a pre-trained XGBoost model that classifies the flow as benign or malicious in under 100 milliseconds. The model is loaded lazily on first use and cached for subsequent predictions. Features not used by the model (such as IP addresses, ports, and timestamps) are automatically filtered out before inference.
+    \item \textbf{Two-Layer ML Classification}: Features are passed through a two-layer cascade. \textbf{Layer 1} uses an ensemble of four models (XGBoost, Random Forest, LightGBM, SVM) with majority voting to determine if the flow is DoH or non-DoH traffic. Only flows classified as DoH proceed to \textbf{Layer 2}, where an XGBoost model classifies the flow as malicious or benign in under 100 milliseconds. This two-stage approach filters out non-DoH traffic early, reducing computational overhead and improving detection accuracy through ensemble consensus.
     \item \textbf{Alert Reporting}: Malicious detections are logged locally and reported to the central backend via HTTP for centralized visibility. The agent sends a POST request to the \texttt{/report-malware/} endpoint with agent identification, malware type, and the complete flow details including the 28 extracted features.
 \end{itemize}
 
@@ -28,15 +28,16 @@ The detection pipeline is implemented in the \texttt{src/domains/pipeline.py} mo
 \begin{enumerate}
     \item \textbf{Sniffing}: The function calls \texttt{sniff(prn=handler, store=False, timeout=120)} from Scapy, which captures packets for 120 seconds. Each packet is passed to a handler function that feeds it to the \texttt{FlowCollector}.
     \item \textbf{Flow Processing}: After the sniffing period, all active flows are retrieved from the \texttt{FlowCollector}. Each flow's \texttt{get\_data()} method is called to compute the 28 features. Flows with insufficient packets (fewer than 2 packets in either direction) are filtered out.
-    \item \textbf{Feature Filtering}: Metadata fields (\texttt{SourceIP}, \texttt{SourcePort}, \texttt{DestinationIP}, \texttt{DestinationPort}, \texttt{Duration}, \texttt{TimeStamp}, \texttt{DoH}) are removed, leaving only the 28 numerical features in the correct order expected by the model.
-    \item \textbf{Prediction}: The filtered feature vector is passed to \texttt{model.predict()}, which returns 0 for benign and 1 for malicious traffic. The prediction result is logged along with the flow summary.
+    \item \textbf{Feature Filtering}: Metadata fields (\texttt{SourceIP}, \texttt{SourcePort}, \texttt{DestinationIP}, \texttt{DestinationPort}, \texttt{Duration}, \texttt{TimeStamp}, \texttt{DoH}) are removed, leaving only the 28 numerical features in the correct order expected by the models.
+    \item \textbf{Layer 1 Prediction (DoH Detection)}: The filtered feature vector is passed to an ensemble of four L1 models (XGBoost, Random Forest, LightGBM, SVM). Each model independently predicts DoH or Non-DoH, and the final decision is determined by majority vote. A comparison report is saved to disk after each pipeline round.
+    \item \textbf{Layer 2 Prediction (Malware Detection)}: If the L1 ensemble votes DoH, the feature vector is passed to the L2 XGBoost model, which returns 0 for benign and 1 for malicious. If the L1 vote is Non-DoH, the flow is logged but skipped for malware classification.
 \end{enumerate}
 
 The pipeline uses multi-threading to maintain responsiveness. The capture thread runs the Scapy sniffer while the main thread manages scheduling and alert dispatch. The \texttt{APScheduler} library is configured with two jobs: (i) \texttt{capture\_and\_predict} running every 120 seconds, and (ii) \texttt{send\_heartbeat} running every 60 seconds to maintain agent registration with the backend.
 
 \subsection{Result}
 
-The integrated pipeline successfully demonstrates real-time DoH malware detection on endpoint devices. The XGBoost model achieves 100.00\% accuracy on the CIC-DoHBrw-2020 test set, with a prediction latency of under 100 milliseconds per flow. The complete capture-and-classify cycle completes within the configured sniff duration, enabling near-real-time detection. The pipeline is designed to be extensible: alternative ML models (Random Forest, SVM, LightGBM) have also been implemented and can be substituted with minimal code changes, allowing future upgrades as better models become available.
+The integrated pipeline successfully demonstrates real-time two-layer DoH malware detection on endpoint devices. The L1 ensemble (XGBoost, Random Forest, LightGBM, SVM) achieves 99.82\% accuracy for DoH vs Non-DoH classification, and the L2 XGBoost model achieves 100.00\% accuracy on the CIC-DoHBrw-2020 test set. Total prediction latency remains under 100 milliseconds per flow despite the additional ensemble computation. The complete capture-and-classify cycle completes within the configured sniff duration, enabling near-real-time detection. The pipeline generates per-round L1 comparison reports automatically, providing operators with visibility into model agreement and ensemble health.
 
 \section{Dual-Component Agent-Dashboard Architecture}
 
@@ -82,10 +83,12 @@ Detecting malicious traffic is only one part of endpoint security. An effective 
 The ShieldX agent integrates with the Linux nftables firewall subsystem to enforce domain whitelists dynamically. The FirewallManager component provides the following capabilities:
 
 \begin{itemize}
-    \item \textbf{Whitelist Retrieval}: The agent fetches the current whitelist from the backend API during each heartbeat cycle.
+    \item \textbf{Whitelist Retrieval}: The agent fetches the current whitelist from the backend API during each heartbeat cycle, including the global enable/disable toggle state.
+    \item \textbf{Whitelist Toggle}: Administrators can enable or disable the whitelist globally through the dashboard. When disabled, the agent flushes all nftables rules and allows all outbound traffic. The toggle state is propagated to all agents during their next heartbeat cycle.
     \item \textbf{DNS Resolution}: Each whitelisted domain is resolved to its IP addresses using standard DNS resolution.
     \item \textbf{nftables Rule Generation}: The agent creates an nftables table named "shieldx" with a chain on the output hook. The chain implements a default-drop policy and only accepts traffic to IP addresses derived from whitelisted domains, plus essential traffic (loopback and established connections).
-    \item \textbf{Policy Flush}: When the whitelist is updated, the agent flushes the existing nftables table and recreates the rules with the new domain set.
+    \item \textbf{Policy Flush}: When the whitelist is updated or toggled off, the agent flushes the existing nftables table and recreates the rules with the new domain set.
+    \item \textbf{Recent Domain Monitoring}: The agent runs a periodic network scan to monitor outbound TCP connections and collects the domains being accessed. During each heartbeat, the agent reports the most recent domains (up to 50) to the backend's RecentDomain table. Administrators can view this data per agent on the dashboard to audit external domain access.
     \item \textbf{Sanitization}: Domain names are sanitized to remove protocol prefixes and paths before resolution.
 \end{itemize}
 

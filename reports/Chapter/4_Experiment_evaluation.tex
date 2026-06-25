@@ -129,10 +129,11 @@ The backend package follows FastAPI conventions:
 \begin{itemize}
     \item \texttt{main.py}: Application factory with lifespan management, CORS configuration, and router registration.
     \item \texttt{database.py}: SQLModel engine and session factory for MySQL connectivity.
-    \item \texttt{models.py}: ORM classes for Agent, MalwareAlert, and WhitelistDomain.
+    \item \texttt{models.py}: ORM classes for Agent, MalwareAlert, WhitelistDomain, WhitelistConfig, and RecentDomain.
     \item \texttt{routes/heartbeat.py}: Agent registration and heartbeat endpoints.
     \item \texttt{routes/malware.py}: Malware alert ingestion and listing endpoints.
-    \item \texttt{routes/whitelist.py}: CRUD endpoints for whitelist domain management.
+    \item \texttt{routes/whitelist.py}: CRUD endpoints for whitelist domain management, plus toggle GET/PUT endpoints to enable/disable the whitelist globally.
+    \item \texttt{routes/recent\_domains.py}: Endpoints to submit and retrieve per-agent recent domain access logs, with a download endpoint for exporting log data.
 \end{itemize}
 
 \subsubsection{Frontend Package}
@@ -140,12 +141,14 @@ The backend package follows FastAPI conventions:
 The frontend follows a page-based SPA architecture:
 
 \begin{itemize}
-    \item \texttt{App.tsx}: Root component with sidebar navigation and page routing via state.
+    \item \texttt{App.tsx}: Root component with sidebar navigation and page routing via state. Now supports a detail view mode that replaces the current page when an agent is selected for inspection.
     \item \texttt{pages/Dashboard.tsx}: Summary statistics with agent count, alert count, and domain count.
-    \item \texttt{pages/Agents.tsx}: Agent list table with status indicators.
-    \item \texttt{pages/MalwareAlerts.tsx}: Malware alerts table with details.
-    \item \texttt{pages/Whitelist.tsx}: Full CRUD table with modal dialogs for domain management.
-    \item \texttt{api.ts}: Axios HTTP client with typed API functions.
+    \item \texttt{pages/Agents.tsx}: Agent list table with status indicators and a "Details" button per agent to navigate to the agent detail view.
+    \item \texttt{pages/AgentDetail.tsx}: Detail page for a selected agent, displaying its recent outbound domains (fetched from the RecentDomain table), IP addresses, timestamps, and a download button to export the domain log as a file.
+    \item \texttt{pages/MalwareAlerts.tsx}: Malware alerts table. Clicking an alert row opens a modal dialog showing the full alert details including ID, agent ID, malware type, details, and detection timestamp.
+    \item \texttt{pages/Whitelist.tsx}: Full CRUD table with modal dialogs for domain management, plus a toggle switch to enable or disable the whitelist globally. When disabled, a warning banner informs the administrator that all domains are allowed.
+    \item \texttt{api.ts}: Axios HTTP client with typed API functions, extended with \texttt{recentDomainsApi} and whitelist toggle endpoints.
+    \item \texttt{types.ts}: TypeScript interfaces for Agent, MalwareAlert, WhitelistDomain, and the new RecentDomain type.
 \end{itemize}
 
 \section{Detailed design}
@@ -186,8 +189,21 @@ The ShieldX-web dashboard is designed for security administrators who need to mo
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_whitelist.png}
-    \caption{Whitelist domain management page}
+    \caption{Whitelist domain management page with enable/disable toggle and warning banner}
     \label{fig:ui_whitelist}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_agent_detail.png}
+    \caption{Agent detail page showing recent outbound domains with IP addresses and timestamps}
+    \label{fig:ui_agent_detail}
+\end{figure}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/ui_alert_modal.png}
+    \caption{Malware alert detail modal showing full alert information on click}
+    \label{fig:ui_alert_modal}
 \end{figure}
 
 \subsection{Layer design}
@@ -201,27 +217,44 @@ The agent pipeline is designed as a sequence of processing stages, each encapsul
 
 \paragraph{Stage 3 -- Feature Extraction:} When a flow expires (after 40 seconds of inactivity or exceeding 120 seconds duration), the \texttt{Flow.get\_data()} method computes the 28 statistical features from the stored packets.
 
-\paragraph{Stage 4 -- Classification:} The feature vector is passed to the pre-trained XGBoost model, which returns a prediction (0 for benign, 1 for malicious). The model is loaded lazily and cached for subsequent predictions.
+\paragraph{Stage 4 -- Two-Layer Ensemble Classification:} The feature vector is passed through a cascade of two classification layers:
 
-\paragraph{Stage 5 -- Alerting:} If the prediction is malicious, the agent sends a POST request to the backend's /report-malware/ endpoint with the flow details.
+\begin{itemize}
+    \item \textbf{Layer 1 (DoH vs Non-DoH)}: An ensemble of four machine learning models (XGBoost, Random Forest, LightGBM, SVM) independently predicts whether the flow is DNS-over-HTTPS (DoH) or non-DoH traffic. The final L1 decision is determined by \textbf{majority voting}: each model casts one vote, and the class with the most votes is selected. This ensemble approach improves robustness against individual model weaknesses. A comparison report (\texttt{l1\_comparison\_report.json}) is automatically generated after each pipeline round, tracking per-model predictions and agreement rates across all processed flows.
+    \item \textbf{Layer 2 (Malicious vs Benign)}: If the Layer 1 ensemble classifies the flow as DoH traffic, an XGBoost model (pre-trained on the CIC-DoHBrw-2020 dataset) classifies it as malicious or benign. Non-DoH traffic is recorded but not passed to Layer 2, reducing the computational overhead of malware classification on irrelevant traffic.
+\end{itemize}
+
+The two-layer design reduces false positives by ensuring that only traffic confirmed as DoH by the L1 ensemble undergoes malware analysis, while the L1 comparison report enables operators to monitor ensemble health and per-model drift over time.
+
+\paragraph{Stage 5 -- Alerting:} If the L2 prediction is malicious, the agent sends a POST request to the backend's /report-malware/ endpoint with the flow details.
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{Figure/Chapter4/sequence_detection.png}
-    \caption{Sequence diagram of the malware detection pipeline}
+    \caption{Sequence diagram of the two-layer malware detection pipeline}
     \label{fig:sequence_detection}
 \end{figure}
 
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{Figure/Chapter4/diagram_l1_ensemble.png}
+    \caption{Two-layer classification pipeline: L1 ensemble (XGBoost, Random Forest, LightGBM, SVM) with majority voting for DoH detection, followed by L2 XGBoost for malware classification}
+    \label{fig:l1_ensemble}
+\end{figure}
 \subsection{Database design}
 \label{section:4.2.3}
 
-The system uses a MySQL database with three tables:
+The system uses a MySQL database with five tables:
 
 \paragraph{Agent table:} Stores information about each registered ShieldX agent, including its unique ID, hostname, IP address, first and last seen timestamps, and current status (active/offline).
 
 \paragraph{MalwareAlert table:} Stores reports of detected malicious flows, with references to the reporting agent, malware type classification, detailed flow features, and detection timestamp.
 
 \paragraph{WhitelistDomain table:} Stores the list of trusted domains that agents should allow traffic to. Each entry includes the domain name, optional notes, and the date added.
+
+\paragraph{WhitelistConfig table:} Stores the global whitelist enable/disable toggle. When disabled, the agent bypasses the whitelist firewall rules and allows all outbound traffic. This gives administrators the flexibility to temporarily disable domain restrictions without deleting whitelist entries.
+
+\paragraph{RecentDomain table:} Records outbound domains that each agent has recently connected to, including the resolved IP address, first-seen and last-seen timestamps. Agents report their recent domains during each heartbeat cycle, and the administrator can view this data per-agent on the dashboard to inspect which external domains are being accessed.
 
 \begin{figure}[H]
     \centering
@@ -269,10 +302,11 @@ Firewall Management & nftables & Latest \\
 The ShieldX project consists of two main software components with the following metrics:
 
 \begin{itemize}
-    \item \textbf{ShieldX Agent}: Approximately 1,000+ lines of Python code across 20+ modules covering packet capture, feature extraction, model inference, firewall management, system information collection, and agent orchestration.
-    \item \textbf{ShieldX-web Backend}: Approximately 200 lines of Python code across 10+ modules covering API endpoints, database models, configuration, middleware, and services.
-    \item \textbf{ShieldX-web Frontend}: Approximately 450 lines of TypeScript/TSX code across 9 files covering 4 main pages, API client, type definitions, and theme configuration.
-    \item \textbf{ML Model}: An XGBoost classifier with 200 trees trained on the CIC-DoHBrw-2020 dataset (499,106 labeled flows).
+    \item \textbf{ShieldX Agent}: Approximately 1,200+ lines of Python code across 25+ modules covering packet capture, feature extraction, two-layer ensemble model inference, firewall management, network monitoring, recent domain reporting, and agent orchestration.
+    \item \textbf{ShieldX-web Backend}: Approximately 250 lines of Python code across 12+ modules covering API endpoints, database models (5 tables), whitelist toggle, recent domain routes, configuration, middleware, and services.
+    \item \textbf{ShieldX-web Frontend}: Approximately 550 lines of TypeScript/TSX code across 12 files covering 5 main pages (including AgentDetail), alert detail modal, whitelist toggle, API client, type definitions, and theme configuration.
+    \item \textbf{ML Models (Layer 1 -- DoH Detection)}: Four models (XGBoost, Random Forest, LightGBM, SVM) forming an ensemble classifier trained on the CIC-DoHBrw-2020 dataset with 233,428 samples for DoH vs Non-DoH classification.
+    \item \textbf{ML Model (Layer 2 -- Malware Detection)}: An XGBoost classifier with 200 trees trained on 499,106 labeled flows for Malicious vs Benign classification.
 \end{itemize}
 
 \subsection{Illustration of main functions}
@@ -493,8 +527,49 @@ XGBoost was selected as the production model for ShieldX based on the following 
 
 The near-perfect results also suggest that the CIC-DoHBrw-2020 dataset, while comprehensive, may contain inherent patterns that are relatively easy for tree-based models to exploit. Future work should explore cross-dataset validation to assess generalization to unseen DoH traffic patterns.
 
-\subsection{Feature Importance Analysis}
+\subsection{Layer 1 Model Comparison (DoH vs Non-DoH Detection)}
 \label{section:4.6.7}
+
+While Section 4.6 evaluated models for the Layer 2 task (Malicious vs Benign classification), this subsection presents a separate evaluation for the Layer 1 task: distinguishing DoH traffic from non-DoH traffic. The L1 dataset consists of 233,428 samples from DoH and non-DoH traffic flows, using the same 28 statistical features.
+
+\subsubsection{Experimental Setup}
+
+The four models (XGBoost, Random Forest, LightGBM, SVM) were trained and evaluated on the L1 dataset under identical conditions with an 80/20 stratified train-test split. The evaluation metrics focus on the DoH class (class 1) since detecting DoH traffic correctly is the primary objective of Layer 1.
+
+\subsubsection{Quantitative Results}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1 Score} & \textbf{Train Time (s)} \\
+\hline
+XGBoost       & 99.82\% & 99.83\% & 99.40\% & 99.61\% & 34.20 \\
+Random Forest & 99.79\% & 99.83\% & 99.27\% & 99.55\% & 320.70 \\
+LightGBM      & 99.74\% & 99.70\% & 99.17\% & 99.44\% & 21.87 \\
+SVM           & 38.77\% & 26.79\% & 95.25\% & 41.82\% & 57.91 \\
+\hline
+\end{tabular}
+\caption{L1 model performance comparison for DoH vs Non-DoH detection on 233,428 test samples}
+\label{tab:l1_model_comparison}
+\end{table}
+
+\subsubsection{Analysis}
+
+The results closely mirror the Layer 2 findings: tree-based ensemble models (XGBoost, Random Forest, LightGBM) achieve near-perfect accuracy above 99.7\%, while SVM performs poorly with only 38.77\% accuracy. The key observations are:
+
+\begin{itemize}
+    \item \textbf{XGBoost} achieves the highest overall accuracy (99.82\%) and F1 score (99.61\%), consistent with its Layer 2 performance. It also trains in a reasonable 34 seconds, offering the best accuracy-efficiency trade-off.
+    \item \textbf{Random Forest} matches XGBoost in precision (99.83\%) but requires nearly 10x longer training time (320 seconds), making it less practical for iterative model development.
+    \item \textbf{LightGBM} is the fastest to train (21.87 seconds) while maintaining competitive accuracy (99.74\%), making it an attractive alternative when training time is constrained.
+    \item \textbf{SVM} achieves high recall (95.25\%) but extremely low precision (26.79\%), meaning it classifies almost all traffic as DoH -- essentially a degenerate classifier that is unsuitable for production use.
+\end{itemize}
+
+The high agreement between the three tree-based models validates the ensemble voting approach used in the ShieldX agent: when all three top-performing models agree, the confidence in the L1 prediction is exceptionally high. The full agreement rate across all four models (including the unreliable SVM) is tracked in the per-round comparison report, allowing the system to monitor ensemble health over time.
+
+\subsection{Feature Importance Analysis}
+\label{section:4.6.8}
 
 XGBoost provides built-in feature importance scores that reveal which statistical features contribute most to the classification decision. The top 10 most important features are:
 

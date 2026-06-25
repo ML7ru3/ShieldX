@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine
-from models import Agent, MalwareAlert, WhitelistDomain
-from sqlmodel import SQLModel, Session
-from routes import heartbeat, malware, whitelist
+from models import Agent, MalwareAlert, WhitelistDomain, WhitelistConfig
+from sqlmodel import SQLModel, Session, select
+from routes import heartbeat, malware, whitelist, recent_domains
 from apscheduler.schedulers.background import BackgroundScheduler
 
 scheduler = BackgroundScheduler()
@@ -16,6 +16,11 @@ def check_stale_agents():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        config = session.get(WhitelistConfig, 1)
+        if not config:
+            session.add(WhitelistConfig(id=1, enabled=True))
+            session.commit()
     scheduler.add_job(check_stale_agents, "interval", minutes=1, id="check_agents_offline")
     scheduler.start()
     yield
@@ -34,3 +39,4 @@ app.add_middleware(
 app.include_router(heartbeat.router, prefix="/heartbeat", tags=["heartbeat"])
 app.include_router(malware.router, prefix="/report-malware", tags=["malware"])
 app.include_router(whitelist.router, prefix="/domain/whitelist", tags=["whitelist"])
+app.include_router(recent_domains.router, prefix="/domain/recent", tags=["recent_domains"])

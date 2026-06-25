@@ -6,6 +6,9 @@ joblib
 scapy
 pyarrow
 pandas
+numpy
+scipy
+cryptography
 apscheduler
 pytest
 PyYAML

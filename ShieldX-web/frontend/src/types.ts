@@ -21,3 +21,12 @@ export interface WhitelistDomain {
   date_added: string;
   notes: string | null;
 }
+
+export interface RecentDomain {
+  id: number;
+  agent_id: string;
+  domain: string;
+  ip: string;
+  first_seen: string;
+  last_seen: string;
+}

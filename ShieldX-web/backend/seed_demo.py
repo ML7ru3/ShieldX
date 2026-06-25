@@ -7,7 +7,7 @@ import random
 from datetime import datetime, timedelta
 from sqlmodel import Session, select
 from database import engine
-from models import Agent, MalwareAlert, WhitelistDomain
+from models import Agent, MalwareAlert, WhitelistDomain, RecentDomain, WhitelistConfig
 
 DEMO_AGENTS = [
     {"agent_id": "trung-vm-01", "hostname": "trung-vm-01", "ip": "192.168.1.101"},
@@ -64,10 +64,17 @@ def seed():
                 session.delete(alert)
             for domain in session.exec(select(WhitelistDomain)).all():
                 session.delete(domain)
+            for rd in session.exec(select(RecentDomain)).all():
+                session.delete(rd)
             for agent in existing_agents:
                 session.delete(agent)
             session.commit()
             print("Cleared existing data.")
+
+        config = session.get(WhitelistConfig, 1)
+        if not config:
+            session.add(WhitelistConfig(id=1, enabled=True))
+            session.commit()
 
         for a in DEMO_AGENTS:
             agent = Agent(

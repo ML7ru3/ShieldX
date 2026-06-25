@@ -4,11 +4,12 @@ import {
   Badge, Spinner, Flex, VStack, Alert, AlertIcon,
   Button, Input, Modal, ModalOverlay, ModalContent, ModalHeader,
   ModalBody, ModalFooter, ModalCloseButton, useDisclosure, useToast,
-  IconButton, HStack, useColorModeValue, Textarea,
+  IconButton, HStack, useColorModeValue, Textarea, Switch, FormControl, FormLabel,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon, EditIcon } from '@chakra-ui/icons'
 import axios from 'axios'
 import type { WhitelistDomain } from '../types'
+import { whitelistApi } from '../api'
 
 const API = 'http://localhost:8000/domain/whitelist'
 
@@ -19,18 +20,36 @@ export default function Whitelist() {
   const [editDomain, setEditDomain] = useState<WhitelistDomain | null>(null)
   const [formDomain, setFormDomain] = useState('')
   const [formNotes, setFormNotes] = useState('')
+  const [whitelistEnabled, setWhitelistEnabled] = useState(true)
+  const [toggling, setToggling] = useState(false)
   const toast = useToast()
   const bg = useColorModeValue('white', 'gray.800')
 
   const { isOpen, onOpen, onClose } = useDisclosure()
 
   const fetchDomains = () => {
-    axios.get(`${API}/`)
-      .then(res => { setDomains(res.data.domains || []); setLoading(false) })
+    whitelistApi.getAll()
+      .then(res => {
+        setDomains(res.data.domains || [])
+        setWhitelistEnabled(res.data.whitelist_enabled)
+        setLoading(false)
+      })
       .catch(() => { setError('Failed to fetch whitelist'); setLoading(false) })
   }
 
   useEffect(() => { fetchDomains() }, [])
+
+  const handleToggle = async (enabled: boolean) => {
+    setToggling(true)
+    try {
+      await whitelistApi.setToggle(enabled)
+      setWhitelistEnabled(enabled)
+      toast({ title: `Whitelist ${enabled ? 'enabled' : 'disabled'}`, status: 'success', duration: 2000 })
+    } catch {
+      toast({ title: 'Failed to update whitelist toggle', status: 'error', duration: 3000 })
+    }
+    setToggling(false)
+  }
 
   const openAdd = () => {
     setEditDomain(null); setFormDomain(''); setFormNotes(''); onOpen()
@@ -79,11 +98,33 @@ export default function Whitelist() {
           <Heading size="lg" fontWeight="bold" color="gray.800">Whitelist Domains</Heading>
           <Text color="gray.500" fontSize="sm">Manage trusted domains</Text>
         </VStack>
-        <Button leftIcon={<AddIcon />} colorScheme="blue" borderRadius="full" px={6} onClick={openAdd}
-          _hover={{ transform: 'translateY(-1px)', boxShadow: 'lg' }} transition="all 0.2s">
-          Add Domain
-        </Button>
+        <HStack spacing={4}>
+          <FormControl display="flex" alignItems="center">
+            <FormLabel htmlFor="whitelist-toggle" mb="0" fontSize="sm" fontWeight="medium" color="gray.600">
+              Enable Whitelist
+            </FormLabel>
+            <Switch
+              id="whitelist-toggle"
+              colorScheme="green"
+              isChecked={whitelistEnabled}
+              isDisabled={toggling}
+              onChange={e => handleToggle(e.target.checked)}
+              size="lg"
+            />
+          </FormControl>
+          <Button leftIcon={<AddIcon />} colorScheme="blue" borderRadius="full" px={6} onClick={openAdd}
+            _hover={{ transform: 'translateY(-1px)', boxShadow: 'lg' }} transition="all 0.2s">
+            Add Domain
+          </Button>
+        </HStack>
       </Flex>
+
+      {!whitelistEnabled && (
+        <Alert status="warning" mb={6} borderRadius="xl">
+          <AlertIcon />
+          Domain whitelist is currently disabled. All domains will be allowed.
+        </Alert>
+      )}
 
       {error && <Alert status="warning" mb={6} borderRadius="xl"><AlertIcon />{error}</Alert>}
 

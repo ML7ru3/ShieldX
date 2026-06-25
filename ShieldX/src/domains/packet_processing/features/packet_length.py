@@ -84,7 +84,7 @@ class PacketLength:
         """
         mode = -1
         if len(self.get_packet_length()) != 0:
-            mode = int(stat.mode(self.get_packet_length(), keepdims=True)[0])
+            mode = int(stat.mode(self.get_packet_length(), keepdims=True)[0][0])
 
         return mode
 
