@@ -23,6 +23,9 @@ from domains import system_info
 from domains.pipeline import load_model, load_l1_model, get_l1_manager, capture_and_predict
 from domains.firewall import FirewallManager
 from domains.network_monitor import NetworkMonitor
+from domains.cleanup import cleanup_browsers, flush_dns_cache, DEFAULT_BROWSER_PROCESSES
+from domains.dns_proxy import DnsmasqHandler
+from domains.dns_monitor import DNSMonitor
 
 CONFIG_PATH = os.environ.get("SHIELDX_CONFIG", "agent_config.yaml")
 
@@ -112,7 +115,7 @@ def apply_firewall_rules(wl: DomainWL):
 
 
 # ----- EVENT SCHEDULER ------
-def run_heartbeat(cfg, agent_id, hostname, iface, wl, monitor):
+def run_heartbeat(cfg, agent_id, hostname, iface, wl, monitor, dns_mon, dns_handler=None):
     try:
         ip = get_interface_ip(iface)
         payload = {
@@ -120,15 +123,20 @@ def run_heartbeat(cfg, agent_id, hostname, iface, wl, monitor):
             "hostname": hostname,
             "ip": ip,
         }
+        dns_entries = dns_mon.drain_entries()
+        payload["dns_queries"] = [
+            {"src_ip": e.src_ip, "domain": e.domain, "timestamp": e.timestamp}
+            for e in dns_entries
+        ]
         res = requests.post(cfg['api']['heartbeat'], json=payload, timeout=8)
         res.raise_for_status()
-        _fetch_whitelist(cfg, wl)
+        _fetch_whitelist(cfg, wl, dns_handler)
         _send_recent_domains(cfg, agent_id, monitor)
     except Exception as e:
         logger.error("HEARTBEAT failed: %s", e)
 
 
-def _fetch_whitelist(cfg, wl):
+def _fetch_whitelist(cfg, wl, dns_handler=None):
     try:
         res = requests.get(cfg['api']['get_whitelist'], timeout=8)
         res.raise_for_status()
@@ -144,6 +152,8 @@ def _fetch_whitelist(cfg, wl):
             apply_firewall_rules(wl)
 
         wl.reload_all(domains, None)
+        if dns_handler is not None:
+            dns_handler.update(domains=list(wl.set), enabled=wl.enabled)
         logger.info("Refreshed domain whitelist (%d domains, enabled=%s)",
                     len(wl.set), wl.enabled)
     except Exception as e:
@@ -214,6 +224,11 @@ def main():
     setup_file_logger(cfg.get("log_path", "shieldx.log"))
     logger.info("SHIELDX AGENT starting up...")
 
+    # Pre-startup cleanup
+    browser_procs = cfg.get("pre_startup", {}).get("browser_processes", DEFAULT_BROWSER_PROCESSES)
+    cleanup_browsers(browser_procs)
+    flush_dns_cache()
+
     si = system_info.collect_system_info()
     iface = select_best_interface()
     logger.info("Selected network interface: %s", iface)
@@ -242,6 +257,21 @@ def main():
     _fetch_whitelist(cfg, whitelist)
     apply_firewall_rules(whitelist)
 
+    # DNS proxy (dnsmasq)
+    dns_proxy_cfg = cfg.get("dns_proxy", {})
+    dns_handler = DnsmasqHandler(
+        config_path=dns_proxy_cfg.get("config_path", "/tmp/shieldx-dnsmasq.conf"),
+        port=dns_proxy_cfg.get("port", 5353),
+        upstream=dns_proxy_cfg.get("upstream", "8.8.8.8"),
+        fallback_upstream=dns_proxy_cfg.get("fallback_upstream", "8.8.4.4"),
+    )
+    dns_handler.start(domains=list(whitelist.set), enabled=whitelist.enabled)
+
+    # DNS monitor
+    dns_mon_cfg = cfg.get("dns_monitor", {})
+    dns_mon = DNSMonitor(interface=iface, maxlen=dns_mon_cfg.get("max_buffer", 200))
+    dns_mon.start()
+
     monitor = NetworkMonitor(maxlen=50)
 
     load_model()
@@ -249,7 +279,7 @@ def main():
 
     sched = BackgroundScheduler()
     sched.add_job(
-        lambda: run_heartbeat(cfg, agent_id, hostname, iface, whitelist, monitor),
+        lambda: run_heartbeat(cfg, agent_id, hostname, iface, whitelist, monitor, dns_mon, dns_handler),
         'interval',
         seconds=cfg.get('heartbeat_interval', 90)
     )
@@ -271,6 +301,8 @@ def main():
             time.sleep(10)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Agent shutting down...")
+        dns_mon.stop()
+        dns_handler.stop()
         sched.shutdown()
 
 
