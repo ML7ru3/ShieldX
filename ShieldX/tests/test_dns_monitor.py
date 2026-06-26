@@ -103,3 +103,32 @@ class TestDNSMonitor:
         pkt = IP(src="1.1.1.1", dst="2.2.2.2") / TCP(sport=80, dport=443)
         monitor._on_packet(pkt)
         assert len(monitor.get_entries()) == 0
+
+    def test_log_path_creates_log_file(self, tmp_path):
+        from domains.dns_monitor import DNSMonitor, DNSEntry
+
+        log_file = tmp_path / "dns_test.log"
+        monitor = DNSMonitor(interface="eth0", maxlen=10, log_path=str(log_file))
+        monitor._on_packet_callback(DNSEntry(src_ip="1.1.1.1", domain="test.com", timestamp=1000.0))
+        monitor._on_packet_callback(DNSEntry(src_ip="2.2.2.2", domain="example.org", timestamp=1001.0))
+
+        content = log_file.read_text(encoding="utf-8")
+        assert "test.com" in content
+        assert "example.org" in content
+        assert "1.1.1.1" in content
+        monitor.stop()
+
+    def test_stop_closes_log_file(self, tmp_path):
+        from domains.dns_monitor import DNSMonitor, DNSEntry
+
+        log_file = tmp_path / "dns_stop.log"
+        monitor = DNSMonitor(interface="eth0", maxlen=10, log_path=str(log_file))
+        assert monitor._log_file is not None
+        monitor.stop()
+        assert monitor._log_file is None
+
+    def test_no_log_path_no_file(self):
+        from domains.dns_monitor import DNSMonitor
+
+        monitor = DNSMonitor(interface="eth0", maxlen=10, log_path=None)
+        assert monitor._log_file is None

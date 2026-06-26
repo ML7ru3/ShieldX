@@ -19,11 +19,15 @@ class DNSEntry:
 
 
 class DNSMonitor:
-    def __init__(self, interface: str, maxlen: int = 200):
+    def __init__(self, interface: str, maxlen: int = 200, log_path: Optional[str] = None):
         self.interface = interface
         self.maxlen = maxlen
         self.entries: deque[DNSEntry] = deque(maxlen=maxlen)
         self._sniffer: Optional[AsyncSniffer] = None
+        self._log_file = None
+        if log_path:
+            self._log_file = open(log_path, "a", encoding="utf-8")
+            logger.info("DNS query log: %s", log_path)
 
     def start(self) -> None:
         self._sniffer = AsyncSniffer(
@@ -40,6 +44,9 @@ class DNSMonitor:
             self._sniffer.stop()
             self._sniffer = None
             logger.info("DNS monitor stopped")
+        if self._log_file is not None:
+            self._log_file.close()
+            self._log_file = None
 
     def _on_packet(self, pkt) -> None:
         if not pkt.haslayer(DNS) or not pkt.haslayer(IP):
@@ -56,6 +63,10 @@ class DNSMonitor:
 
     def _on_packet_callback(self, entry: DNSEntry) -> None:
         self.entries.append(entry)
+        if self._log_file is not None:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(entry.timestamp))
+            self._log_file.write(f"{ts},{entry.src_ip},{entry.domain}\n")
+            self._log_file.flush()
 
     def get_entries(self) -> list[DNSEntry]:
         return list(self.entries)

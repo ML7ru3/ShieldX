@@ -269,7 +269,8 @@ def main():
 
     # DNS monitor
     dns_mon_cfg = cfg.get("dns_monitor", {})
-    dns_mon = DNSMonitor(interface=iface, maxlen=dns_mon_cfg.get("max_buffer", 200))
+    dns_log_path = dns_mon_cfg.get("log_path")
+    dns_mon = DNSMonitor(interface=iface, maxlen=dns_mon_cfg.get("max_buffer", 200), log_path=dns_log_path)
     dns_mon.start()
 
     monitor = NetworkMonitor(maxlen=50)

@@ -39,3 +39,4 @@ dns_proxy:
 dns_monitor:
   max_buffer: 200
   filter: "udp and port 53"
+  log_path: "dns_queries.log"

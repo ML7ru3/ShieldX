@@ -19,7 +19,7 @@ class TestOrchestratorIntegration:
                 "log_path": "/tmp/test_shieldx.log",
                 "pre_startup": {"browser_processes": ["firefox", "chrome"]},
                 "dns_proxy": {"enabled": True, "port": 5353, "upstream": "8.8.8.8", "fallback_upstream": "8.8.4.4", "config_path": "/tmp/test_dnsmasq.conf"},
-                "dns_monitor": {"max_buffer": 200, "filter": "udp and port 53"},
+                "dns_monitor": {"max_buffer": 200, "filter": "udp and port 53", "log_path": None},
             }
             with patch("agent_orchestrator.setup_file_logger"):
                 with patch("agent_orchestrator.system_info.collect_system_info") as mock_si:
