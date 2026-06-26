@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from scapy.all import AsyncSniffer
-from scapy.layers.dns import DNS, DNSQR
+from scapy.layers.dns import DNS
 from scapy.layers.inet import IP
 
 logger = logging.getLogger(__name__)

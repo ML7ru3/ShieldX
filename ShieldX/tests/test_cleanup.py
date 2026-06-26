@@ -47,7 +47,7 @@ class TestFlushDnsCache:
 
         mock_run.side_effect = [  # first call fails (no resolvectl)
             FileNotFoundError("no resolvectl"),
-            MagicMock(returncode=0),  # second call (systemctl)
+            MagicMock(returncode=0),  # second call (systemd-resolve)
         ]
         flush_dns_cache()
 

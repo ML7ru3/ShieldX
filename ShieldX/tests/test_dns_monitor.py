@@ -1,6 +1,4 @@
-import time
 from unittest.mock import MagicMock, patch
-from collections import deque
 
 import pytest
 
@@ -76,8 +74,6 @@ class TestDNSMonitor:
         from domains.dns_monitor import DNSEntry
         from scapy.layers.dns import DNS, DNSQR, DNSRR
         from scapy.layers.inet import IP, UDP
-        from scapy.packet import Raw
-
         pkt = (
             IP(src="192.168.1.10", dst="8.8.8.8") /
             UDP(sport=54321, dport=53) /
