@@ -75,15 +75,19 @@ class DnsmasqHandler:
         self._restart_dnsmasq()
 
     def disable(self) -> None:
-        self._write_config([])
-        self._restart_dnsmasq()
+        logger.info("DNS proxy disabled — removing iptables redirect, stopping dnsmasq")
+        self._kill_dnsmasq()
+        try:
+            self._iptables_redirect("delete")
+        except IptablesError as e:
+            logger.warning("Failed to remove iptables rule: %s", e)
 
     def start(self, domains: list[str], enabled: bool) -> None:
-        self._iptables_redirect("add")
         if enabled:
+            self._iptables_redirect("add")
             self.enable(domains)
         else:
-            self.disable()
+            logger.info("DNS proxy disabled at startup — not installing iptables redirect")
 
     def stop(self) -> None:
         self._kill_dnsmasq()

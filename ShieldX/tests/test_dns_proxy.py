@@ -37,11 +37,16 @@ class TestDnsmasqHandler:
         server_lines = [l for l in lines if l.startswith("server=") and not l.startswith("server=/")]
         assert len(server_lines) == 0
 
-    def test_disable_creates_config_with_default_server(self, handler):
+    @patch("domains.dns_proxy.subprocess.run")
+    def test_disable_kills_dnsmasq_and_removes_iptables(self, mock_run, handler):
+        mock_run.return_value = MagicMock(returncode=0)
+        proc = MagicMock()
+        handler.process = proc
         handler.disable()
-        with open(handler.config_path) as f:
-            content = f.read()
-        assert "server=8.8.8.8" in content
+
+        iptables_calls = [c for c in mock_run.call_args_list if "iptables" in str(c)]
+        assert any("-D" in str(c) for c in iptables_calls)
+        proc.terminate.assert_called_once()
 
     @patch("domains.dns_proxy.subprocess.Popen")
     @patch("domains.dns_proxy.subprocess.run")
@@ -87,11 +92,13 @@ class TestDnsmasqHandler:
 
     @patch("domains.dns_proxy.subprocess.Popen")
     @patch("domains.dns_proxy.subprocess.run")
-    def test_start_without_whitelist_forwards_all(self, mock_run, mock_popen, handler):
+    def test_start_disabled_does_nothing(self, mock_run, mock_popen, handler):
         mock_run.return_value = MagicMock(returncode=0)
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None
         mock_popen.return_value = mock_proc
         handler.start(domains=[], enabled=False)
+        iptables_calls = [c for c in mock_run.call_args_list if "iptables" in str(c)]
         dnsmasq_calls = [c for c in mock_popen.call_args_list if "dnsmasq" in str(c)]
-        assert len(dnsmasq_calls) == 1
+        assert len(iptables_calls) == 0
+        assert len(dnsmasq_calls) == 0
