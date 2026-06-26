@@ -1,6 +1,6 @@
 import os
 import tempfile
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 import pytest
 
 
