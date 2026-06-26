@@ -7,10 +7,35 @@ api:
   heartbeat: "http://localhost:8000/heartbeat/"
   malware_alert: "http://localhost:8000/report-malware/"
   get_whitelist: "http://localhost:8000/domain/whitelist/"
+  report_recent_domains: "http://localhost:8000/domain/recent/"
 
 heartbeat_interval: 90         # seconds (1.5 minutes)
 sniff_duration: 120            # seconds (2 minutes)
+network_scan_interval: 60      # seconds
 log_path: "agent.log"          # Log file path
-ml_model:
-  path: "xgboost_model.json"   # XGBoost model file name
 interface_scan_interval: 30    # seconds
+
+ml_model:
+  path: "xgboost_model.json"   # Layer 2: XGBoost (Malicious vs Benign)
+l1_model:
+  path: "l1_xgboost_model.json" # Layer 1: XGBoost (DoH vs Non-DoH)
+
+pre_startup:
+  browser_processes:
+    - firefox
+    - chrome
+    - chromium
+    - msedge
+    - brave
+    - opera
+
+dns_proxy:
+  enabled: true
+  port: 5353
+  upstream: 8.8.8.8
+  fallback_upstream: 8.8.4.4
+  config_path: /tmp/shieldx-dnsmasq.conf
+
+dns_monitor:
+  max_buffer: 200
+  filter: "udp and port 53"
