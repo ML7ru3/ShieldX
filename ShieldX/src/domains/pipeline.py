@@ -32,7 +32,6 @@ class L1ModelManager:
         'xgboost': ('l1_xgboost_model.json', 'xgboost'),
         'random_forest': ('l1_random_forest_model.joblib', 'joblib'),
         'lightgbm': ('l1_lightgbm_model.txt', 'lightgbm'),
-        'svm': ('l1_svm_model.joblib', 'joblib'),
     }
 
     def __init__(self, model_dir="."):
@@ -194,7 +193,7 @@ def capture_and_predict(interface='eth0', sniff_duration=120):
     session = FlowCollector()
     sniffer = AsyncSniffer(
         iface=interface,
-        filter='ip and tcp port 443',
+        filter='(ip or ip6) and tcp port 443',
         prn=session.on_packet_received,
         store=False,
     )

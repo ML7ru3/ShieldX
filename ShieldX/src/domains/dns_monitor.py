@@ -7,6 +7,7 @@ from typing import Optional
 from scapy.all import AsyncSniffer
 from scapy.layers.dns import DNS
 from scapy.layers.inet import IP
+from scapy.layers.inet6 import IPv6
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,9 @@ class DNSMonitor:
             self._log_file = None
 
     def _on_packet(self, pkt) -> None:
-        if not pkt.haslayer(DNS) or not pkt.haslayer(IP):
+        if not pkt.haslayer(DNS):
+            return
+        if not pkt.haslayer(IP) and not pkt.haslayer(IPv6):
             return
         dns = pkt[DNS]
         if dns.qr != 0:
@@ -57,7 +60,7 @@ class DNSMonitor:
         if not dns.qd:
             return
         domain = dns.qd.qname.decode("utf-8", errors="replace").rstrip(".")
-        src_ip = pkt[IP].src
+        src_ip = pkt[IPv6].src if IPv6 in pkt else pkt[IP].src
         entry = DNSEntry(src_ip=src_ip, domain=domain, timestamp=time.time())
         self._on_packet_callback(entry)
 

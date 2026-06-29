@@ -226,7 +226,7 @@ def main():
 
     # Pre-startup cleanup
     browser_procs = cfg.get("pre_startup", {}).get("browser_processes", DEFAULT_BROWSER_PROCESSES)
-    cleanup_browsers(browser_procs)
+    # cleanup_browsers(browser_procs)
     flush_dns_cache()
 
     si = system_info.collect_system_info()

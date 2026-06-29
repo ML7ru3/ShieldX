@@ -59,7 +59,10 @@ class FirewallManager:
         _run_nft('add', 'rule', 'inet', NFTABLES_TABLE, NFTABLES_CHAIN, 'oif', 'lo', 'accept')
         _run_nft('add', 'rule', 'inet', NFTABLES_TABLE, NFTABLES_CHAIN, 'ct', 'state', 'established,related', 'accept')
         for ip in resolved_ips:
-            _run_nft('add', 'rule', 'inet', NFTABLES_TABLE, NFTABLES_CHAIN, 'ip', 'daddr', ip, 'accept')
+            if ':' in ip:
+                _run_nft('add', 'rule', 'inet', NFTABLES_TABLE, NFTABLES_CHAIN, 'ip6', 'daddr', ip, 'accept')
+            else:
+                _run_nft('add', 'rule', 'inet', NFTABLES_TABLE, NFTABLES_CHAIN, 'ip', 'daddr', ip, 'accept')
         logger.info("Whitelist applied: %d unique IPs whitelisted via nftables", len(resolved_ips))
 
     def flush(self) -> None:

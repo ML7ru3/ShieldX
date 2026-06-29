@@ -1,7 +1,16 @@
 #!/usr/bin/env python
 
 
+from scapy.layers.inet import IP
+from scapy.layers.inet6 import IPv6
+
 from . import packet_direction
+
+
+def _get_ip_layer(packet):
+    if IPv6 in packet:
+        return packet[IPv6]
+    return packet[IP]
 
 
 def get_packet_flow_key(packet, direction) -> tuple:
@@ -16,7 +25,7 @@ def get_packet_flow_key(packet, direction) -> tuple:
         direction: The direction of a packet
 
     Returns:
-        A tuple of the String IPv4 addresses of the destination,
+        A tuple of the String IP addresses of the destination,
         the source port as an int,
         the time to live value,
         the window size, and
@@ -30,14 +39,16 @@ def get_packet_flow_key(packet, direction) -> tuple:
     else:
         raise Exception('Only TCP protocols are supported.')
 
+    ip_layer = _get_ip_layer(packet)
+
     if direction == packet_direction.PacketDirection.FORWARD:
-        dest_ip = packet['IP'].dst
-        src_ip = packet['IP'].src
+        dest_ip = ip_layer.dst
+        src_ip = ip_layer.src
         src_port = packet[protocol].sport
         dest_port = packet[protocol].dport
     else:
-        dest_ip = packet['IP'].src
-        src_ip = packet['IP'].dst
+        dest_ip = ip_layer.src
+        src_ip = ip_layer.dst
         src_port = packet[protocol].dport
         dest_port = packet[protocol].sport
 

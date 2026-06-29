@@ -1,4 +1,5 @@
 from scapy.layers.inet import IP, TCP
+from scapy.layers.inet6 import IPv6
 from scapy.layers.l2 import Ether
 
 from .context.packet_direction import PacketDirection
@@ -88,7 +89,8 @@ class FlowBytes:
         """
 
         def header_size(packet):
-            res = len(Ether()) + len(IP())
+            ip_header = len(IPv6()) if packet.version == 6 else len(IP())
+            res = len(Ether()) + ip_header
             if packet.proto == 6:
                 res += len(TCP())
             return res
@@ -125,7 +127,8 @@ class FlowBytes:
         """
 
         def header_size(packet):
-            res = len(Ether()) + len(IP())
+            ip_header = len(IPv6()) if packet.version == 6 else len(IP())
+            res = len(Ether()) + ip_header
             if packet.proto == 6:
                 res += len(TCP())
             return res
@@ -179,5 +182,7 @@ class FlowBytes:
 
         """
         feat = self.feature
-        return [packet['IP'].ttl for packet, _ in
-                feat.packets][0]
+        packet = feat.packets[0][0]
+        if packet.version == 6:
+            return packet['IPv6'].hlim
+        return packet['IP'].ttl
