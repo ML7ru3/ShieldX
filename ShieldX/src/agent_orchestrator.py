@@ -20,7 +20,7 @@ import requests
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from domains import system_info
-from domains.pipeline import load_model, load_l1_model, get_l1_manager, capture_and_predict
+from domains.pipeline import load_model, load_l1_model, capture_and_predict
 from domains.firewall import FirewallManager
 from domains.network_monitor import NetworkMonitor
 from domains.cleanup import cleanup_browsers, flush_dns_cache, DEFAULT_BROWSER_PROCESSES
