@@ -94,11 +94,30 @@ The ShieldX system depends on a rich ecosystem of open-source libraries and fram
 
 These external dependencies are managed through the \texttt{requirements.txt} file in the ShieldX project root. The agent runtime dependencies (Scapy, XGBoost, NumPy, APScheduler) are kept minimal for lightweight deployment, while the training and backend dependencies (scikit-learn, FastAPI, Pydantic) are isolated in separate environments.
 
+The package dependencies are organized into three separate diagrams corresponding to each major subsystem:
+
+\paragraph{Agent Package Diagram:}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.90\textwidth]{Figure/Chapter4/package_dependency_diagram.png}
-    \caption{Package dependency diagram showing module relationships across the ShieldX system}
-    \label{fig:package_dependency}
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter4/package_agent.png}
+    \caption{Agent package diagram showing packet processing, domain logic, and configuration modules}
+    \label{fig:package_agent}
+\end{figure}
+
+\paragraph{Backend Package Diagram:}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter4/package_backend.png}
+    \caption{Backend package diagram showing API routes, middleware, and service modules}
+    \label{fig:package_backend}
+\end{figure}
+
+\paragraph{Frontend Package Diagram:}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.80\textwidth]{Figure/Chapter4/package_frontend.png}
+    \caption{Frontend package diagram showing page components and API client modules}
+    \label{fig:package_frontend}
 \end{figure}
 
 \subsection{Detailed package design}
@@ -211,20 +230,20 @@ The ShieldX-web dashboard is designed for security administrators who need to mo
 
 The agent pipeline is designed as a sequence of processing stages, each encapsulated in a dedicated module:
 
-\paragraph{Stage 1 -- Packet Capture:} The \texttt{AsyncSniffer} from Scapy captures packets from the network interface. It runs in a background thread and passes captured packets to the \texttt{FlowCollector} (a subclass of \texttt{FlowSession}) for processing.
+\paragraph{Stage 1 -- Packet Capture:} The \texttt{AsyncSniffer} from Scapy captures packets from the network interface. It runs in a background thread and passes captured packets to the \texttt{FlowCollector} (a subclass of \texttt{FlowSession}) for processing. The agent supports both IPv4 and IPv6 traffic, capturing TCP packets on port 443 (HTTPS) using BPF filter expressions. IPv6 flows are identified by their 128-bit addresses and handled transparently alongside IPv4 flows.
 
-\paragraph{Stage 2 -- Flow Assembly:} The \texttt{FlowCollector} groups captured packets into bidirectional flows. A flow is identified by the tuple (source IP, source port, destination IP, destination port). The \texttt{Flow} object maintains a list of packets with their direction annotations (FORWARD or REVERSE).
+\paragraph{Stage 2 -- Flow Assembly:} The \texttt{FlowCollector} groups captured packets into bidirectional flows. A flow is identified by the tuple (source IP, source port, destination IP, destination port, protocol), supporting both IPv4 and IPv6 addresses. The \texttt{Flow} object maintains a list of packets with their direction annotations (FORWARD or REVERSE).
 
 \paragraph{Stage 3 -- Feature Extraction:} When a flow expires (after 40 seconds of inactivity or exceeding 120 seconds duration), the \texttt{Flow.get\_data()} method computes the 28 statistical features from the stored packets.
 
 \paragraph{Stage 4 -- Two-Layer Ensemble Classification:} The feature vector is passed through a cascade of two classification layers:
 
 \begin{itemize}
-    \item \textbf{Layer 1 (DoH vs Non-DoH)}: An ensemble of four machine learning models (XGBoost, Random Forest, LightGBM, SVM) independently predicts whether the flow is DNS-over-HTTPS (DoH) or non-DoH traffic. The final L1 decision is determined by \textbf{majority voting}: each model casts one vote, and the class with the most votes is selected. This ensemble approach improves robustness against individual model weaknesses. A comparison report (\texttt{l1\_comparison\_report.json}) is automatically generated after each pipeline round, tracking per-model predictions and agreement rates across all processed flows.
-    \item \textbf{Layer 2 (Malicious vs Benign)}: If the Layer 1 ensemble classifies the flow as DoH traffic, an XGBoost model (pre-trained on the CIC-DoHBrw-2020 dataset) classifies it as malicious or benign. Non-DoH traffic is recorded but not passed to Layer 2, reducing the computational overhead of malware classification on irrelevant traffic.
+    \item \textbf{Layer 1 (DoH vs Non-DoH)}: An XGBoost model (pre-trained on the CIC-DoHBrw-2020 dataset) predicts whether the flow is DNS-over-HTTPS (DoH) or non-DoH traffic. This initial filtering step ensures that only traffic identified as DoH proceeds to malware analysis, reducing computational overhead on irrelevant traffic.
+    \item \textbf{Layer 2 (Malicious vs Benign)}: If Layer 1 classifies the flow as DoH traffic, a second XGBoost model (also pre-trained on the CIC-DoHBrw-2020 dataset) classifies it as malicious or benign. Non-DoH traffic is recorded but not passed to Layer 2, reducing the computational overhead of malware classification on irrelevant traffic.
 \end{itemize}
 
-The two-layer design reduces false positives by ensuring that only traffic confirmed as DoH by the L1 ensemble undergoes malware analysis, while the L1 comparison report enables operators to monitor ensemble health and per-model drift over time.
+The two-layer design reduces false positives by ensuring that only traffic confirmed as DoH undergoes malware analysis, filtering out non-DoH encrypted traffic that constitutes the majority of network flows.
 
 \paragraph{Stage 5 -- Alerting:} If the L2 prediction is malicious, the agent sends a POST request to the backend's /report-malware/ endpoint with the flow details.
 
@@ -238,9 +257,12 @@ The two-layer design reduces false positives by ensuring that only traffic confi
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.85\textwidth]{Figure/Chapter4/diagram_l1_ensemble.png}
-    \caption{Two-layer classification pipeline: L1 ensemble (XGBoost, Random Forest, LightGBM, SVM) with majority voting for DoH detection, followed by L2 XGBoost for malware classification}
+    \caption{Two-layer classification pipeline: L1 XGBoost for DoH vs Non-DoH detection, followed by L2 XGBoost for malware classification}
     \label{fig:l1_ensemble}
 \end{figure}
+
+The diagram illustrates the two-layer classification cascade. Layer 1 uses an XGBoost model pre-trained on the CIC-DoHBrw-2020 dataset to distinguish DoH traffic from non-DoH encrypted flows. Only flows classified as DoH proceed to Layer 2, where a second XGBoost model performs binary classification between benign and malicious traffic. This staged approach ensures that computational resources are focused on relevant traffic.
+
 \subsection{Database design}
 \label{section:4.2.3}
 
@@ -302,11 +324,11 @@ Firewall Management & nftables & Latest \\
 The ShieldX project consists of two main software components with the following metrics:
 
 \begin{itemize}
-    \item \textbf{ShieldX Agent}: Approximately 1,200+ lines of Python code across 25+ modules covering packet capture, feature extraction, two-layer ensemble model inference, firewall management, network monitoring, recent domain reporting, and agent orchestration.
-    \item \textbf{ShieldX-web Backend}: Approximately 250 lines of Python code across 12+ modules covering API endpoints, database models (5 tables), whitelist toggle, recent domain routes, configuration, middleware, and services.
-    \item \textbf{ShieldX-web Frontend}: Approximately 550 lines of TypeScript/TSX code across 12 files covering 5 main pages (including AgentDetail), alert detail modal, whitelist toggle, API client, type definitions, and theme configuration.
-    \item \textbf{ML Models (Layer 1 -- DoH Detection)}: Four models (XGBoost, Random Forest, LightGBM, SVM) forming an ensemble classifier trained on the CIC-DoHBrw-2020 dataset with 233,428 samples for DoH vs Non-DoH classification.
-    \item \textbf{ML Model (Layer 2 -- Malware Detection)}: An XGBoost classifier with 200 trees trained on 499,106 labeled flows for Malicious vs Benign classification.
+    \item \textbf{ShieldX Agent}: Approximately 1,600+ lines of Python code across 30+ modules covering packet capture (including IPv6 support), feature extraction, two-layer XGBoost model inference, nftables-based firewall management, DNS proxy with dnsmasq integration, DNS monitoring with query logging, recent domain reporting, and agent orchestration.
+    \item \textbf{ShieldX-web Backend}: Approximately 300 lines of Python code across 14+ modules covering API endpoints, database models (5 tables), whitelist toggle, recent domain routes, configuration, middleware, and services.
+    \item \textbf{ShieldX-web Frontend}: Approximately 600 lines of TypeScript/TSX code across 13 files covering 5 main pages (including AgentDetail with domain log display), alert detail modal, whitelist toggle with warning banner, API client, type definitions, and theme configuration.
+    \item \textbf{ML Model (Layer 1 -- DoH Detection)}: An XGBoost classifier trained on the CIC-DoHBrw-2020 dataset with 233,428 samples for DoH vs Non-DoH classification, achieving 99.82\% accuracy.
+    \item \textbf{ML Model (Layer 2 -- Malware Detection)}: An XGBoost classifier with 200 trees trained on 499,106 labeled flows for Malicious vs Benign classification, achieving 100.00\% accuracy on the test set.
 \end{itemize}
 
 \subsection{Illustration of main functions}
@@ -350,14 +372,17 @@ The backend includes API-level tests:
 \hline
 \textbf{Test Area} & \textbf{Tests} & \textbf{Result} \\
 \hline
-Agent Model Loading & 2 & Pass \\
-Agent Prediction & 3 & Pass \\
-Agent Feature Filtering & 2 & Pass \\
-Agent Pipeline Integration & 2 & Pass \\
-Agent Flow Collector & 2 & Pass \\
-Backend Health API & 3 & Pass \\
+ML Model Loading & 4 & Pass \\
+ML Prediction & 4 & Pass \\
+ML Feature Filtering & 2 & Pass \\
+Pipeline Integration & 4 & Pass \\
+Flow Collector & 2 & Pass \\
+DNS Monitor & 14 & Pass \\
+DNS Proxy (Dnsmasq) & 9 & Pass \\
+Browser/Task Cleanup & 5 & Pass \\
+Orchestrator Integration & 3 & Pass \\
 \hline
-\textbf{Total} & \textbf{14} & \textbf{All Pass} \\
+\textbf{Total} & \textbf{47} & \textbf{All Pass} \\
 \hline
 \end{tabular}
 \caption{Summary of test results}
@@ -525,7 +550,49 @@ XGBoost was selected as the production model for ShieldX based on the following 
     \item \textbf{Proven reliability}: XGBoost has been widely adopted in both academic research and industrial applications for tabular data classification.
 \end{itemize}
 
-The near-perfect results also suggest that the CIC-DoHBrw-2020 dataset, while comprehensive, may contain inherent patterns that are relatively easy for tree-based models to exploit. Future work should explore cross-dataset validation to assess generalization to unseen DoH traffic patterns.
+\subsection{Comparison with Existing Research}
+\label{section:4.6.6a}
+
+To contextualize the results, Table \ref{tab:comparison_paper} compares ShieldX model performance with the original CIC-DoHBrw-2020 study by MontazeriShatoori et al. \cite{montazeri2020doh}. The reference study evaluated multiple classifiers on the same dataset for both Layer 1 (DoH vs Non-DoH) and Layer 2 (Benign vs Malicious) tasks.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\multirow{2}{*}{\textbf{Model}} & \multicolumn{2}{c|}{\textbf{Layer 1 Precision}} & \multicolumn{2}{c|}{\textbf{Layer 2 Precision}} \\
+\cline{2-5}
+ & \textbf{ShieldX} & \textbf{Paper \cite{montazeri2020doh}} & \textbf{ShieldX} & \textbf{Paper \cite{montazeri2020doh}} \\
+\hline
+Random Forest    & 99.83\% & 99.3\% & 100.00\% & 99.9\% \\
+Decision Tree/C4.5 & N/A   & 99.3\% & N/A      & 99.9\% \\
+XGBoost          & 99.83\% & N/A   & 99.99\%  & N/A   \\
+SVM              & 26.79\% & 87.7\% & 81.03\%  & 89.0\% \\
+Naive Bayes      & N/A     & 84.0\% & N/A      & 83.6\% \\
+2D CNN           & N/A     & 98.0\% & N/A      & 99.0\% \\
+DNN              & N/A     & 97.0\% & N/A      & 98.0\% \\
+\hline
+\end{tabular}
+\caption{Precision comparison between ShieldX models and MontazeriShatoori et al. \cite{montazeri2020doh} on the CIC-DoHBrw-2020 dataset}
+\label{tab:comparison_paper}
+\end{table}
+
+The comparison reveals several observations. First, the results are highly consistent between ShieldX and the reference study: tree-based models (Random Forest, XGBoost) achieve precision above 99\% in both Layer 1 and Layer 2 tasks across both studies. This consistency confirms that the 28 statistical flow features provide reliable discriminative information for encrypted traffic classification. Second, the reference study's evaluation of deep learning approaches (2D CNN, DNN) shows that even these complex models do not significantly outperform tree-based methods, suggesting that the feature set is well-suited for decision-tree-based algorithms. Third, SVM performs poorly in both studies, although the reference study reports higher SVM precision (87.7\% L1, 89.0\% L2) compared to ShieldX (26.79\% L1, 81.03\% L2). This discrepancy may be attributed to differences in feature scaling and hyperparameter tuning.
+
+\subsection{Analysis of Near-Perfect Classification Results}
+\label{section:4.6.6b}
+
+While the near-perfect accuracy (99.99\%+) achieved by tree-based models merits discussion, it is important to note that this is consistent with findings in the reference literature. MontazeriShatoori et al. \cite{montazeri2020doh} reported similar results, with Random Forest achieving 99.9\% precision at Layer 2. Several factors contribute to these exceptionally high metrics:
+
+\begin{itemize}
+    \item \textbf{Controlled dataset collection environment}: The CIC-DoHBrw-2020 dataset was collected in a laboratory setting using simulated benign and malicious traffic. Benign DoH traffic was generated through standard web browsing, while malicious traffic was produced using tunneling tools (Iodine, DNS2TCP, DNScat2). These tools generate network flows with statistically distinct patterns compared to normal browsing traffic. Tunneling traffic typically exhibits regular packet sizes, consistent inter-arrival times, and asymmetric byte ratios that are easily distinguishable from human-generated browsing patterns \cite{montazeri2020doh}.
+    \item \textbf{Optimized feature design}: The 28 statistical features were specifically designed by the dataset authors to maximize separability between benign and malicious encrypted traffic. Features such as packet length variance, coefficient of variation, and response time skewness were selected based on prior research demonstrating their discriminative power for encrypted traffic analysis.
+    \item \textbf{Tree-based model suitability}: Decision tree ensembles (Random Forest, XGBoost, LightGBM) are particularly well-suited for tabular data with clear decision boundaries. The 28 features are numerical and exhibit non-linear relationships that tree-based models can capture naturally through recursive partitioning, without requiring extensive feature engineering.
+    \item \textbf{Binary classification simplicity}: The binary classification task (benign vs malicious) is inherently simpler than multi-class classification. Malicious tunneling traffic in the dataset follows distinct protocol patterns (base64 encoding, DNS message padding) that create sharp statistical contrasts with benign traffic.
+    \item \textbf{Consistent train-test distribution}: The 80/20 stratified train-test split ensures that both sets follow the same class distribution and feature distribution. In real-world deployment, distribution shift between training data and live traffic is expected to reduce accuracy, and cross-dataset validation is identified as important future work.
+\end{itemize}
+
+These factors collectively explain the near-perfect results. However, it is important to emphasize that these results represent performance on the CIC-DoHBrw-2020 dataset under controlled conditions. Real-world performance may differ due to diverse network environments, evolving malware techniques, and traffic patterns not represented in the training data.
 
 \subsection{Layer 1 Model Comparison (DoH vs Non-DoH Detection)}
 \label{section:4.6.7}
@@ -566,7 +633,7 @@ The results closely mirror the Layer 2 findings: tree-based ensemble models (XGB
     \item \textbf{SVM} achieves high recall (95.25\%) but extremely low precision (26.79\%), meaning it classifies almost all traffic as DoH -- essentially a degenerate classifier that is unsuitable for production use.
 \end{itemize}
 
-The high agreement between the three tree-based models validates the ensemble voting approach used in the ShieldX agent: when all three top-performing models agree, the confidence in the L1 prediction is exceptionally high. The full agreement rate across all four models (including the unreliable SVM) is tracked in the per-round comparison report, allowing the system to monitor ensemble health over time.
+The high agreement between the three tree-based models validates that these features provide strong discriminative information for DoH detection. XGBoost was selected as the production L1 model due to its highest accuracy (99.82\%), fastest inference speed (2.9 \textmu s per sample), and compact model size, making it the most suitable choice for the real-time two-layer pipeline.
 
 \subsection{Feature Importance Analysis}
 \label{section:4.6.8}

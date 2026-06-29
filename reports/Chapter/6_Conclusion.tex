@@ -7,7 +7,7 @@ This thesis presented the design, implementation, and evaluation of ShieldX, an 
 
 The research began with a comprehensive survey of the problem domain, identifying the security challenges introduced by DNS-over-HTTPS and the limitations of existing solutions. Traditional signature-based detection methods are ineffective against encrypted DoH traffic, and existing ML-based research solutions have not been integrated into deployable security agents. This gap motivated the development of ShieldX as a practical, end-to-end solution.
 
-The theoretical background covered the essential concepts underlying the system: DNS-over-HTTPS protocol mechanics, statistical network flow analysis, and four machine learning algorithms (XGBoost, Random Forest, LightGBM, and SVM). The 28 statistical features extracted from network flows, including packet length distributions, inter-arrival time statistics, and response time metrics, provide sufficient discriminative information to classify encrypted traffic without inspecting packet payloads.
+The theoretical background covered the essential concepts underlying the system: DNS-over-HTTPS protocol mechanics, statistical network flow analysis, and four machine learning algorithms (XGBoost, Random Forest, LightGBM, and SVM), with XGBoost selected as the primary classifier for both layers. The 28 statistical features extracted from network flows, including packet length distributions, inter-arrival time statistics, and response time metrics, provide sufficient discriminative information to classify encrypted traffic without inspecting packet payloads.
 
 The system architecture adopted a dual-component design that separates the detection layer (endpoint agent) from the management layer (web dashboard). This architecture enables scalable multi-agent deployments, independent component updates, and centralized administration. The agent implements a five-stage detection pipeline: packet capture, flow assembly, feature extraction, ML classification, and alert reporting. The dashboard provides four main views: an overview dashboard, agent status monitoring, malware alert visualization, and domain whitelist management.
 
@@ -31,7 +31,6 @@ Despite the achievements, several limitations of the current ShieldX system shou
     \item \textbf{Single dataset evaluation}: The model was trained and evaluated exclusively on the CIC-DoHBrw-2020 dataset. Generalization to DoH traffic from different network environments or time periods has not been validated.
     \item \textbf{No authentication}: The current backend API lacks authentication, making it unsuitable for production deployment without additional security measures.
     \item \textbf{Offline training only}: The ML model is trained offline and deployed as a static artifact. There is no mechanism for continuous learning or model updating based on new traffic patterns.
-    \item \textbf{Limited alert integration}: While the agent logs malicious detections locally, the integration with the backend API for real-time alert visualization is not fully implemented in the current version.
     \item \textbf{No encryption for agent-backend communication}: Communication between agents and the backend uses plain HTTP, which could be intercepted by network attackers.
 \end{itemize}
 

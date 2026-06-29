@@ -49,56 +49,88 @@ The primary users of the ShieldX system are security administrators who need to 
 \section{Functional Overview}
 \label{section:2.2}
 
-\subsection{General Use Case Diagram}
+\subsection{Use Case Diagrams}
 \label{subsection:2.2.1}
 
 The ShieldX system involves two primary actors: the \textbf{Security Administrator} and the \textbf{ShieldX Agent}. The ShieldX Agent is an automated system actor that performs packet capture, classification, and alerting without direct human interaction. The Security Administrator interacts with the ShieldX-web dashboard to monitor and manage the system.
 
+\subsubsection{System-Level Use Case Diagram}
+
+Figure \ref{fig:usecase_system} presents the system-level use case diagram, illustrating the high-level interactions between both actors and the ShieldX system. The agent handles lifecycle management, traffic monitoring, threat detection, and domain access control, while the administrator manages domain policies and oversees the system through the centralized dashboard.
+
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{Figure/Chapter2/usecase_general.png}
-    \caption{General use case diagram of the ShieldX system}
-    \label{fig:usecase_general}
+    \includegraphics[width=0.75\textwidth]{Figure/Chapter2/usecase_system.png}
+    \caption{System-level use case diagram of the ShieldX system}
+    \label{fig:usecase_system}
 \end{figure}
 
-\subsection{Detailed Use Case Diagram}
+\subsubsection{Agent Use Case Diagram}
+
+The ShieldX Agent performs five core use cases autonomously: heartbeat registration, DoH detection via packet capture, malware alert reporting, whitelist synchronization, and recent domain reporting. The alert reporting use case extends the detection use case, as alerts are only generated after a malicious flow is identified. Recent domain reporting extends heartbeat registration, as domain logs are transmitted during each heartbeat cycle.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{Figure/Chapter2/usecase_agent.png}
+    \caption{Agent use case diagram showing autonomous operations}
+    \label{fig:usecase_agent}
+\end{figure}
+
+\subsubsection{Administrator Use Case Diagram}
+
+The Security Administrator interacts with the system through five management use cases: monitoring the system health dashboard, tracking agent status, reviewing and inspecting malware alerts (with flow detail inspection as an extension of alert review), and managing the domain whitelist.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.75\textwidth]{Figure/Chapter2/usecase_admin.png}
+    \caption{Administrator use case diagram showing management operations}
+    \label{fig:usecase_admin}
+\end{figure}
+
+\subsection{Detailed Use Case Description}
 \label{subsection:2.2.2}
-
-\subsubsection{Agent Management}
-The agent management use case covers agent registration, heartbeat monitoring, and status tracking. Agents automatically register with the backend upon startup and periodically send heartbeat signals. The system tracks the online/offline status of each agent based on heartbeat recency.
-
-\subsubsection{Malware Alert Management}
-This use case involves the reporting and visualization of malware alerts. When the ShieldX agent detects a malicious flow, it sends an alert to the backend. Security administrators can view, filter, and analyze alerts through the dashboard.
-
-\subsubsection{Domain Whitelist Management}
-Security administrators can manage a list of trusted domains through the dashboard. The whitelist is synchronized with agents, which enforce it using nftables firewall rules to block traffic to non-whitelisted domains.
 
 \subsection{Business Process}
 \label{subsection:2.2.3}
 
 The core business process of the ShieldX system is the detection and response pipeline. The process begins with the agent capturing packets from the network interface. Packets are grouped into bidirectional flows, and 28 statistical features are extracted for each flow. The XGBoost model classifies the flow as benign or malicious. If malicious, an alert is sent to the backend, and the administrator can review the alert and take appropriate action, such as updating the whitelist or investigating the affected endpoint.
 
-The complete business process can be described through the following sequence of activities:
+The complete business process is divided into three phases: agent initialization, the detection pipeline, and alert handling.
 
-\begin{enumerate}
-    \item \textbf{Agent Initialization}: The ShieldX agent starts and performs self-configuration, loading the XGBoost model file, initializing the packet capture interface, and registering with the backend via a heartbeat request.
-    \item \textbf{Network Monitoring}: The agent begins capturing packets on the configured network interface, filtering for TCP traffic on port 443 (HTTPS). Captured packets are buffered and grouped into bidirectional flows based on the standard 5-tuple.
-    \item \textbf{Flow Completion}: Flows are marked as complete when either (a) no packets have been observed for 40 seconds, or (b) the flow has existed for more than 120 seconds. Completed flows are passed to the feature extraction stage.
-    \item \textbf{Feature Extraction}: For each completed flow, a Python module computes 28 statistical features covering bytes-level metrics, packet length distribution statistics, packet timing patterns, and response time analysis.
-    \item \textbf{ML Classification}: The feature vector is passed to the XGBoost classifier, which produces a binary prediction: benign (0) or malicious (1). The prediction probability is also recorded for confidence assessment.
-    \item \textbf{Aletting and Logging}: If the prediction is malicious, the agent logs the flow details locally and sends an alert to the ShieldX-web backend via a REST API call. The backend stores the alert in the database for later review.
-    \item \textbf{Administrator Review}: The security administrator accesses the ShieldX-web dashboard to review alerts, examine flow details, and make decisions about whitelist updates or further investigation.
-    \item \textbf{Whitelist Synchronization}: On the next heartbeat cycle, the agent retrieves the updated whitelist from the backend and reconfigures the nftables firewall rules to enforce the new domain access policy.
-\end{enumerate}
+\subsubsection{Agent Initialization}
 
-This process runs continuously, with the detection cycle repeating every 120 seconds and the heartbeat cycle every 60 seconds. The system is designed to operate autonomously, requiring administrator intervention only when malicious traffic is detected.
+When the ShieldX agent starts, it first loads the pre-trained XGBoost model from disk, initializes the packet capture interface, and registers with the backend server via a heartbeat request. If the backend is unreachable, the heartbeat is queued for later retry. Once registration is confirmed, the detection pipeline scheduler begins.
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=0.85\textwidth]{Figure/Chapter2/activity_detection_pipeline.png}
+    \includegraphics[width=0.60\textwidth]{Figure/Chapter2/activity_init.png}
+    \caption{Activity diagram of agent initialization}
+    \label{fig:activity_init}
+\end{figure}
+
+\subsubsection{Detection Pipeline}
+
+The detection pipeline runs continuously on a 120-second cycle. The agent captures packets from the network interface using a BPF filter for TCP traffic on port 443 (HTTPS). Captured packets are grouped into bidirectional flows based on the standard 5-tuple. Flows are marked as complete when either no packets have been observed for 40 seconds, or the flow has existed for more than 120 seconds. For each completed flow, 28 statistical features are computed covering bytes-level metrics, packet length distribution statistics, packet timing patterns, and response time analysis. The feature vector is then passed through a two-layer XGBoost classifier: Layer 1 distinguishes DoH from non-DoH traffic, and Layer 2 classifies DoH flows as benign or malicious.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.65\textwidth]{Figure/Chapter2/activity_detection.png}
     \caption{Activity diagram of the malware detection pipeline}
     \label{fig:activity_detection}
 \end{figure}
+
+\subsubsection{Alert Handling and Response}
+
+When a malicious flow is detected, the agent extracts the flow details, logs them locally, and sends an alert to the ShieldX-web backend via a REST API call. If the backend is unreachable, the alert is queued for later retransmission. The security administrator can then log into the dashboard, review alerts, examine flow details, and decide whether to update the domain whitelist. Changes to the whitelist are propagated to agents during their next heartbeat cycle.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\textwidth]{Figure/Chapter2/activity_alert.png}
+    \caption{Activity diagram of alert handling and administrator response}
+    \label{fig:activity_alert}
+\end{figure}
+
+The process runs continuously, with the detection cycle repeating every 120 seconds and the heartbeat cycle every 60 seconds. The system is designed to operate autonomously, requiring administrator intervention only when malicious traffic is detected.
 
 \section{Functional description}
 \label{section:2.3}
