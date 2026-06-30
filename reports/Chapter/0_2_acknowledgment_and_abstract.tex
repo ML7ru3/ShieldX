@@ -1,0 +1,33 @@
+\documentclass[../Main.tex]{subfiles}
+\pagenumbering{roman}
+\begin{document}
+
+\begin{center}
+    \Large{\textbf{ACKNOWLEDGMENTS}}\\
+\end{center}
+\vspace{0.5cm}
+
+First and foremost, I would like to express my deepest gratitude to my supervisor, PhD. Nguyen Huu Duc, for his invaluable guidance, continuous support, and insightful feedback throughout the course of this graduation thesis. His expertise in network security and machine learning has been instrumental in shaping this work.
+
+I am also grateful to the faculty and staff of the School of Information and Communications Technology at Hanoi University of Science and Technology for providing a stimulating academic environment and the necessary resources for this research.
+
+I would like to thank my family for their unwavering encouragement and understanding during the long hours spent on this project. Their belief in me has been a constant source of motivation.
+
+Lastly, I extend my appreciation to the open-source community for the tools and libraries that made this project possible, including Scapy, XGBoost, FastAPI, React, and many others.
+
+\vspace{0.8cm}
+
+\begin{center}
+    \Large{\textbf{ABSTRACT}}\\
+\end{center}
+\vspace{0.5cm}
+
+The rapid adoption of DNS-over-HTTPS (DoH) has significantly enhanced user privacy by encrypting DNS queries within HTTPS traffic. However, this encryption also creates a security gap: malware can abuse DoH to hide command-and-control communication from traditional network security tools that rely on inspecting plaintext DNS traffic. This graduation thesis presents ShieldX, an intelligent endpoint security agent that detects malware communication over DoH using machine learning. The system consists of two main components: a lightweight Python-based endpoint agent and a centralized web management dashboard. The agent captures live TLSv1.3 traffic, extracts 28 statistical features from bidirectional network flows (including packet length distributions, inter-arrival times, response time statistics, and byte-level metrics), and classifies flows using a pre-trained XGBoost model. The model, trained on the CIC-DoHBrw-2020 dataset of 499,106 labeled flows, achieves 99.2\% accuracy. The web dashboard, built with FastAPI and React, provides security administrators with centralized visibility into agent status, malware alerts, and domain whitelist management. The system also integrates with the Linux nftables firewall for kernel-level enforcement of domain whitelists. ShieldX bridges the gap between academic research on encrypted traffic analysis and practical, deployable endpoint security, offering a complete pipeline from real-time packet capture to centralized alert management.
+
+\begin{flushright}
+\begin{tabular}{@{}c@{}}
+Student\\
+\textit{(Signature and full name)}
+\end{tabular}
+\end{flushright}
+\end{document}
